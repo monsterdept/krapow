@@ -1,5 +1,5 @@
-// Package sshkeys manages the ed25519 keypair rowner uses to talk to Windows
-// runner VMs over SSH. The pair lives at ~/.rowner/keys/id_ed25519{,.pub}
+// Package sshkeys manages the ed25519 keypair krapow uses to talk to Windows
+// runner VMs over SSH. The pair lives at ~/.krapow/keys/id_ed25519{,.pub}
 // and is generated on first use.
 package sshkeys
 
@@ -34,7 +34,7 @@ func EnsureKeyPair() (privPath string, pubPath string, err error) {
 	}
 
 	// OpenSSH-format private key (so user can also `ssh -i <path>` ad hoc).
-	privBlock, err := ssh.MarshalPrivateKey(priv, "rowner")
+	privBlock, err := ssh.MarshalPrivateKey(priv, "krapow")
 	if err != nil {
 		return "", "", err
 	}
@@ -76,7 +76,7 @@ func keysDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	d := filepath.Join(home, ".rowner", "keys")
+	d := filepath.Join(home, ".krapow", "keys")
 	if err := os.MkdirAll(d, 0o700); err != nil {
 		return "", err
 	}

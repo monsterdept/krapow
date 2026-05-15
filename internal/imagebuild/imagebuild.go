@@ -1,8 +1,8 @@
-// Package imagebuild builds a Windows base image for rowner without
+// Package imagebuild builds a Windows base image for krapow without
 // depending on any third-party repository at runtime.
 //
 // The build is self-contained: autounattend.xml and setup-ssh.ps1 are embedded
-// in the rowner binary, the Windows Server 2022 Eval ISO + virtio-win ISO are
+// in the krapow binary, the Windows Server 2022 Eval ISO + virtio-win ISO are
 // downloaded from Microsoft / Fedora to a local cache on first run, and
 // distrobuilder + Incus do the heavy lifting.
 //
@@ -26,10 +26,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/rossturk/rowner/internal/incus"
-	"github.com/rossturk/rowner/internal/sshkeys"
-	"github.com/rossturk/rowner/internal/tui"
-	"github.com/rossturk/rowner/internal/winssh"
+	"github.com/rossturk/krapow/internal/incus"
+	"github.com/rossturk/krapow/internal/sshkeys"
+	"github.com/rossturk/krapow/internal/tui"
+	"github.com/rossturk/krapow/internal/winssh"
 )
 
 // bakeOut / bakeErr are where runFG (the helper that shells out to
@@ -171,7 +171,7 @@ func doBake(r *tui.Runner, targetAlias string) error {
 		r.End("answer", err)
 		return err
 	}
-	answerISO := filepath.Join(work, "rowner-answer.iso")
+	answerISO := filepath.Join(work, "krapow-answer.iso")
 	if err := buildAnswerISO(answerISO, unattendPath, setupSSHPath); err != nil {
 		r.End("answer", err)
 		return fmt.Errorf("build answer ISO: %w", err)
@@ -179,7 +179,7 @@ func doBake(r *tui.Runner, targetAlias string) error {
 	r.End("answer", nil)
 
 	// ---------- install ----------
-	bakeInstance := "rowner-win-bake-" + fmt.Sprint(time.Now().Unix())
+	bakeInstance := "krapow-win-bake-" + fmt.Sprint(time.Now().Unix())
 	r.Start("install")
 	r.Log("creating bake VM %s", bakeInstance)
 	r.Log("Windows install (~30 min). FirstLogonCommand runs setup-ssh.ps1.")
@@ -213,8 +213,8 @@ func doBake(r *tui.Runner, targetAlias string) error {
 
 // ---------- helpers ----------
 
-func cacheDir() (string, error) { return ensureDir(".rowner", "cache") }
-func workDir() (string, error)  { return ensureDir(".rowner", "work") }
+func cacheDir() (string, error) { return ensureDir(".krapow", "cache") }
+func workDir() (string, error)  { return ensureDir(".krapow", "work") }
 
 func ensureDir(parts ...string) (string, error) {
 	home, err := os.UserHomeDir()
@@ -341,9 +341,9 @@ func repackWindows(srcISO, dstISO, virtioISO string) error {
 // buildAnswerISO produces a tiny ISO containing /autounattend.xml and
 // /setup-ssh.ps1 at the root. Windows Setup searches removable read-only media
 // for autounattend.xml at boot, and FirstLogonCommands invokes setup-ssh.ps1
-// from the same disc to install OpenSSH + authorize rowner's pubkey.
+// from the same disc to install OpenSSH + authorize krapow's pubkey.
 func buildAnswerISO(dst string, files ...string) error {
-	stage, err := os.MkdirTemp("", "rowner-answer-")
+	stage, err := os.MkdirTemp("", "krapow-answer-")
 	if err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func buildAnswerISO(dst string, files ...string) error {
 		}
 	}
 	return runFG("xorriso", "-as", "mkisofs",
-		"-volid", "ROWNER_ANSWER",
+		"-volid", "KRAPOW_ANSWER",
 		"-J", "-r",
 		"-o", dst,
 		stage,
@@ -443,7 +443,7 @@ func vmIPv4(name string) string {
 
 // installToolchain SSHes into the post-Windows-install bake VM and runs the
 // universal toolchain installer (VS 2022 Build Tools, chocolatey). Bakes the
-// result into the image so every `rowner init win` starts with parity to
+// result into the image so every `krapow init win` starts with parity to
 // GitHub-hosted windows-latest.
 func installToolchain(name string) error {
 	privPath, _, err := sshkeys.EnsureKeyPair()
@@ -537,7 +537,7 @@ func runAsRoot(name string, args ...string) error {
 		return runFG(name, args...)
 	}
 	if _, err := exec.LookPath("sudo"); err != nil {
-		return fmt.Errorf("%s requires root and sudo is not on PATH; rerun rowner as root", name)
+		return fmt.Errorf("%s requires root and sudo is not on PATH; rerun krapow as root", name)
 	}
 	// -n: never prompt. If the prime expired, fail fast instead of hanging.
 	return runFG("sudo", append([]string{"-n", name}, args...)...)

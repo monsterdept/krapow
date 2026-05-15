@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/rossturk/rowner/internal/config"
-	"github.com/rossturk/rowner/internal/githubapi"
-	"github.com/rossturk/rowner/internal/incus"
-	"github.com/rossturk/rowner/internal/state"
+	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/githubapi"
+	"github.com/rossturk/krapow/internal/incus"
+	"github.com/rossturk/krapow/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -34,8 +34,8 @@ func destroyCmd() *cobra.Command {
 	}
 }
 
-// completeRunnerNames returns rowner-tracked runner names for shell completion.
-// Used by `stop` and `destroy` so `rowner destroy <Tab>` shows live names.
+// completeRunnerNames returns krapow-tracked runner names for shell completion.
+// Used by `stop` and `destroy` so `krapow destroy <Tab>` shows live names.
 // Only suggests when no positional arg has been given yet.
 func completeRunnerNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) > 0 {
@@ -60,7 +60,7 @@ func doStopOrDestroy(name string, destroy bool) error {
 		return err
 	}
 	if s == nil {
-		return fmt.Errorf("no rowner state for %q", name)
+		return fmt.Errorf("no krapow state for %q", name)
 	}
 	cfg, err := config.Load(".env")
 	if err != nil {

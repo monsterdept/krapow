@@ -1,9 +1,9 @@
-# Installs OpenSSH Server, authorizes rowner's public key, and locks down
+# Installs OpenSSH Server, authorizes krapow's public key, and locks down
 # administrators_authorized_keys. Runs from autounattend FirstLogonCommand.
 $ErrorActionPreference = 'Stop'
 
 function Log($m) {
-    "$([datetime]::Now.ToString('o'))  $m" | Tee-Object C:\rowner-setup.log -Append
+    "$([datetime]::Now.ToString('o'))  $m" | Tee-Object C:\krapow-setup.log -Append
 }
 
 Log "installing OpenSSH.Server"

@@ -1,4 +1,4 @@
-// Package state persists per-runner metadata at ~/.rowner/state/<name>.json.
+// Package state persists per-runner metadata at ~/.krapow/state/<name>.json.
 package state
 
 import (
@@ -23,7 +23,7 @@ func dir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".rowner", "state"), nil
+	return filepath.Join(home, ".krapow", "state"), nil
 }
 
 func path(name string) (string, error) {

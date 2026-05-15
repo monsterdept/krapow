@@ -88,7 +88,7 @@ type contentsResp struct {
 //
 // Returns ErrNotFound (wrapped) if the path doesn't exist. Refusing
 // non-default-branch refs is a safety rail: a PR-author can stage a
-// malicious profile, but it can't run on a rowner-managed runner unless it
+// malicious profile, but it can't run on a krapow-managed runner unless it
 // merges to default first — which goes through the same review the workflow
 // changes do.
 func (c *Client) GetFile(repo, path string) (content []byte, sha string, err error) {
@@ -132,7 +132,7 @@ func (c *Client) do(method, path string, out any) error {
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	req.Header.Set("User-Agent", "rowner/0.1")
+	req.Header.Set("User-Agent", "krapow/0.1")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {

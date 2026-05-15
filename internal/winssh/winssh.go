@@ -1,5 +1,5 @@
 // Package winssh is a thin SSH client for talking to Windows runner VMs
-// provisioned by rowner.
+// provisioned by krapow.
 //
 // Host key verification is disabled — VMs are short-lived, ephemeral, and only
 // reachable over the Incus host's private bridge (10.36.x or fd42:: ULA).

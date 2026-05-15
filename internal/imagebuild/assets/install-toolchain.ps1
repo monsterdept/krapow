@@ -1,4 +1,4 @@
-# Installs the rowner universal Windows toolchain into the base image during
+# Installs the krapow universal Windows toolchain into the base image during
 # bake (post-OS-install, pre-sysprep). Aims for parity with what GitHub-hosted
 # windows-latest ships:
 #
@@ -53,4 +53,4 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
     }
 }
 
-Write-Host "rowner toolchain installed"
+Write-Host "krapow toolchain installed"

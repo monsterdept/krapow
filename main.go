@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rossturk/rowner/cmd"
+	"github.com/rossturk/krapow/cmd"
 )
 
 func main() {
 	if err := cmd.Root().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "rowner:", err)
+		fmt.Fprintln(os.Stderr, "krapow:", err)
 		os.Exit(1)
 	}
 }

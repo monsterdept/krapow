@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rossturk/rowner/internal/config"
-	"github.com/rossturk/rowner/internal/githubapi"
-	"github.com/rossturk/rowner/internal/imagebuild"
-	"github.com/rossturk/rowner/internal/incus"
-	"github.com/rossturk/rowner/internal/provision"
-	"github.com/rossturk/rowner/internal/sshkeys"
-	"github.com/rossturk/rowner/internal/state"
-	"github.com/rossturk/rowner/internal/tui"
-	"github.com/rossturk/rowner/internal/winssh"
+	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/githubapi"
+	"github.com/rossturk/krapow/internal/imagebuild"
+	"github.com/rossturk/krapow/internal/incus"
+	"github.com/rossturk/krapow/internal/provision"
+	"github.com/rossturk/krapow/internal/sshkeys"
+	"github.com/rossturk/krapow/internal/state"
+	"github.com/rossturk/krapow/internal/tui"
+	"github.com/rossturk/krapow/internal/winssh"
 	"github.com/spf13/cobra"
 )
 
@@ -55,7 +55,7 @@ func initLinuxCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: linux-runner-<6 alphanum>)")
-	c.Flags().StringVar(&labels, "labels", "self-hosted,linux,rowner", "comma-separated runner labels")
+	c.Flags().StringVar(&labels, "labels", "self-hosted,linux,krapow", "comma-separated runner labels")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
 }
@@ -71,7 +71,7 @@ func initWinCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: win-runner-<6 alphanum>)")
-	c.Flags().StringVar(&labels, "labels", "self-hosted,windows,rowner", "comma-separated runner labels")
+	c.Flags().StringVar(&labels, "labels", "self-hosted,windows,krapow", "comma-separated runner labels")
 	c.Flags().BoolVarP(&yesBuild, "yes", "y", false, "skip the confirmation prompt before kicking off a base-image build")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
@@ -85,8 +85,8 @@ const (
 )
 
 var (
-	linuxImage   = envOr("ROWNER_LINUX_IMAGE", "images:ubuntu/noble/cloud")
-	windowsImage = envOr("ROWNER_WIN_IMAGE", "local:win-runner-base")
+	linuxImage   = envOr("KRAPOW_LINUX_IMAGE", "images:ubuntu/noble/cloud")
+	windowsImage = envOr("KRAPOW_WIN_IMAGE", "local:win-runner-base")
 )
 
 func envOr(k, def string) string {
@@ -104,7 +104,7 @@ func runInitWin(name, labels string, yesBuild, plain bool) error {
 	if !exists {
 		if !yesBuild {
 			fmt.Printf("Base image %q not found.\n", windowsImage)
-			fmt.Printf("rowner will bake it now: download Windows Server 2022 Eval + virtio drivers, run\n")
+			fmt.Printf("krapow will bake it now: download Windows Server 2022 Eval + virtio drivers, run\n")
 			fmt.Printf("an unattended install, sysprep, and publish — about 45–90 minutes total.\n")
 			fmt.Printf("Proceed? [y/N] ")
 			if !readYes() {
@@ -151,7 +151,7 @@ func runInit(k kind, name, labels string, plain bool) error {
 		name = fmt.Sprintf("%s-%s", prefix, randomSuffix())
 	}
 	if s, _ := state.Load(name); s != nil {
-		return fmt.Errorf("runner %q already exists in rowner state", name)
+		return fmt.Errorf("runner %q already exists in krapow state", name)
 	}
 
 	ic := &initContext{cfg: cfg, gh: githubapi.New(cfg.PAT), kind: k, name: name, labels: labels}
@@ -251,7 +251,7 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	}
 
 	r.Start("state")
-	r.Log("writing ~/.rowner/state/%s.json", ic.name)
+	r.Log("writing ~/.krapow/state/%s.json", ic.name)
 	err = state.Save(state.Runner{
 		Name: ic.name, Kind: "linux", Repo: ic.cfg.Repo,
 		Labels: ic.labels, Created: time.Now(),

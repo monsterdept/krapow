@@ -1,4 +1,4 @@
-module github.com/rossturk/rowner
+module github.com/rossturk/krapow
 
 go 1.25.0
 

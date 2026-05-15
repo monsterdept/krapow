@@ -6,10 +6,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/rossturk/rowner/internal/config"
-	"github.com/rossturk/rowner/internal/githubapi"
-	"github.com/rossturk/rowner/internal/incus"
-	"github.com/rossturk/rowner/internal/state"
+	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/githubapi"
+	"github.com/rossturk/krapow/internal/incus"
+	"github.com/rossturk/krapow/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -22,14 +22,14 @@ const installWindow = 45 * time.Minute
 func statusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "List rowner-managed runners with VM + GitHub runner state",
+		Short: "List krapow-managed runners with VM + GitHub runner state",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			rs, err := state.All()
 			if err != nil {
 				return err
 			}
 			if len(rs) == 0 {
-				fmt.Println("(no rowner-managed runners)")
+				fmt.Println("(no krapow-managed runners)")
 				return nil
 			}
 
@@ -66,13 +66,13 @@ func statusCmd() *cobra.Command {
 	}
 }
 
-// runnerState maps a rowner-tracked runner to a human-readable runner state.
+// runnerState maps a krapow-tracked runner to a human-readable runner state.
 //
 // Lifecycle reads top-to-bottom:
 //
 //	provisioning → installing → idle ⇄ busy → offline
 //
-//	provisioning — rowner state exists, GitHub has no record yet (VM booting,
+//	provisioning — krapow state exists, GitHub has no record yet (VM booting,
 //	               agent hasn't registered yet).
 //	installing   — registered with GitHub, agent not heartbeating, AND created
 //	               within `installWindow`. Profile is still installing.

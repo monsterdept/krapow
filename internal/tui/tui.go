@@ -1,5 +1,5 @@
 // Package tui presents a bubbletea-driven phase tracker for long-running
-// rowner operations (init linux / init win). Falls back to plain text when
+// krapow operations (init linux / init win). Falls back to plain text when
 // stdout isn't a TTY.
 //
 // Usage:
@@ -157,7 +157,7 @@ func (r *Runner) Log(format string, args ...any) {
 func (r *Runner) Finish(err error) {
 	if r.plain {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "rowner: %v\n", err)
+			fmt.Fprintf(os.Stderr, "krapow: %v\n", err)
 		}
 		return
 	}
@@ -274,7 +274,7 @@ func (m *model) View() string {
 		}
 		phaseCells = append(phaseCells, marker+" "+p.spec.Label)
 	}
-	header := fmt.Sprintf("rowner init %s   %s", m.title, fmtDur(time.Since(m.startAt)))
+	header := fmt.Sprintf("krapow init %s   %s", m.title, fmtDur(time.Since(m.startAt)))
 
 	body := strings.Join(phaseCells, "   ")
 	box := boxStyle.Render(headerStyle.Render(header) + "\n" + body)

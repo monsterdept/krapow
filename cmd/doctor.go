@@ -7,16 +7,16 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/rossturk/rowner/internal/config"
-	"github.com/rossturk/rowner/internal/githubapi"
-	"github.com/rossturk/rowner/internal/imagebuild"
+	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/githubapi"
+	"github.com/rossturk/krapow/internal/imagebuild"
 	"github.com/spf13/cobra"
 )
 
 func doctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Diagnose host readiness for rowner",
+		Short: "Diagnose host readiness for krapow",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			checks := []func() checkResult{
 				checkIncusReachable,
@@ -120,7 +120,7 @@ func checkGitHubToken() checkResult {
 	}
 	// FindRunner is the cheapest probe that exercises auth + repo access without minting a token.
 	gh := githubapi.New(cfg.PAT)
-	if _, err := gh.FindRunner(cfg.Repo, "__rowner-doctor-probe__"); err != nil {
+	if _, err := gh.FindRunner(cfg.Repo, "__krapow-doctor-probe__"); err != nil {
 		return checkResult{
 			status: statusFail,
 			name:   "GitHub token works for " + cfg.Repo,
@@ -139,7 +139,7 @@ func checkWindowsBuildDeps() checkResult {
 	return checkResult{
 		status: statusWarn,
 		name:   "Windows base-image build deps",
-		detail: "missing: " + strings.Join(missing, ", ") + " — only needed if you'll run `rowner init win` without a pre-built base image",
+		detail: "missing: " + strings.Join(missing, ", ") + " — only needed if you'll run `krapow init win` without a pre-built base image",
 		fix:    "sudo apt install -y " + strings.Join(missing, " "),
 	}
 }
