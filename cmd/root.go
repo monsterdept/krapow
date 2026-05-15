@@ -1,0 +1,14 @@
+package cmd
+
+import "github.com/spf13/cobra"
+
+func Root() *cobra.Command {
+	root := &cobra.Command{
+		Use:           "rowner",
+		Short:         "Run GitHub Actions self-hosted runners as Incus VMs",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+	root.AddCommand(initCmd(), statusCmd(), stopCmd(), destroyCmd(), doctorCmd())
+	return root
+}

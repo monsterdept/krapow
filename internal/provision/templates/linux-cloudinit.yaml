@@ -1,0 +1,46 @@
+#cloud-config
+package_update: true
+# rowner base toolchain: aiming for parity with what GitHub-hosted
+# ubuntu-latest ships pre-installed. Language toolchains (rust/node/python/
+# etc.) are installed by workflows via actions/setup-*. Project-specific
+# system libs (libwebkit2gtk, etc.) are also up to the workflow.
+packages:
+  # runner-agent prerequisites (download + register)
+  - curl
+  - jq
+  - tar
+  - sudo
+  - ca-certificates
+  # universal C toolchain — every compiled language needs this to link
+  - build-essential
+  - pkg-config
+  - libssl-dev
+write_files:
+  - path: /opt/rowner-bootstrap.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+      id runner || useradd -m -s /bin/bash runner
+      # Grant passwordless sudo so workflow steps can `sudo apt install ...`
+      # without prompting — matches GitHub-hosted ubuntu-latest behavior.
+      install -m 0440 /dev/stdin /etc/sudoers.d/runner <<<'runner ALL=(ALL) NOPASSWD: ALL'
+      mkdir -p /opt/actions-runner
+      chown runner:runner /opt/actions-runner
+      cd /opt/actions-runner
+      case "$(uname -m)" in
+        x86_64)  RARCH=x64 ;;
+        aarch64) RARCH=arm64 ;;
+        *) echo "unsupported arch"; exit 1 ;;
+      esac
+      VER=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name | sed 's/^v//')
+      sudo -u runner curl -fsSLO "https://github.com/actions/runner/releases/download/v${VER}/actions-runner-linux-${RARCH}-${VER}.tar.gz"
+      sudo -u runner tar xzf "actions-runner-linux-${RARCH}-${VER}.tar.gz"
+      ./bin/installdependencies.sh
+      sudo -u runner ./config.sh --unattended --replace \
+        --url "{{.RepoURL}}" --token "{{.RegToken}}" \
+        --name "{{.Name}}" --labels "{{.Labels}}"
+      ./svc.sh install runner
+      ./svc.sh start
+runcmd:
+  - /opt/rowner-bootstrap.sh

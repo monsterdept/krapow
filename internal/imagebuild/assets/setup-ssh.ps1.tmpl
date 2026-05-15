@@ -1,0 +1,42 @@
+# Installs OpenSSH Server, authorizes rowner's public key, and locks down
+# administrators_authorized_keys. Runs from autounattend FirstLogonCommand.
+$ErrorActionPreference = 'Stop'
+
+function Log($m) {
+    "$([datetime]::Now.ToString('o'))  $m" | Tee-Object C:\rowner-setup.log -Append
+}
+
+Log "installing OpenSSH.Server"
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null
+
+Log "starting sshd service"
+Start-Service sshd
+Set-Service sshd -StartupType Automatic
+
+Log "opening firewall on TCP/22"
+if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+}
+
+Log "setting PowerShell as default SSH shell"
+New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
+New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
+    -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
+    -PropertyType String -Force | Out-Null
+
+Log "installing authorized public key for Administrator group"
+$path = 'C:\ProgramData\ssh\administrators_authorized_keys'
+Set-Content -Path $path -Value '{{.PubKey}}' -Encoding ASCII -Force
+
+# Windows OpenSSH requires this file to be owned/writable only by SYSTEM and
+# the Administrators group, else sshd refuses to honour it.
+$acl = Get-Acl $path
+$acl.SetAccessRuleProtection($true, $false)
+$acl.Access | ForEach-Object { $null = $acl.RemoveAccessRule($_) }
+$acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('SYSTEM','FullControl','Allow')))
+$acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule('Administrators','FullControl','Allow')))
+Set-Acl -Path $path -AclObject $acl
+
+Restart-Service sshd
+Log "done"
