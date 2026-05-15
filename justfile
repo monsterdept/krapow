@@ -1,0 +1,61 @@
+# krapow — incus-backed GitHub Actions runner manager.
+# Run `just` (no args) to see the recipe list.
+
+default:
+    @just --list
+
+# build the krapow binary into ./krapow
+build:
+    go build -o krapow .
+
+# install the binary into ~/.local/bin (must be on PATH)
+install: build
+    mkdir -p ~/.local/bin
+    install -m 0755 krapow ~/.local/bin/krapow
+    @echo "installed → ~/.local/bin/krapow"
+
+# remove built artifacts
+clean:
+    rm -f krapow
+
+# run go test across all packages
+test:
+    go test ./...
+
+# vet + format check (pre-commit sanity)
+lint:
+    go vet ./...
+    gofmt -l . | grep . && exit 1 || true
+
+# run the preflight diagnostics
+doctor: build
+    ./krapow doctor
+
+# print rowner runner state
+status: build
+    ./krapow status
+
+# spawn a fresh Linux runner
+linux: build
+    ./krapow init linux
+
+# spawn a fresh Windows runner (auto-bakes base image on first run)
+win: build
+    ./krapow init win
+
+# destroy a runner by name (tab-completes via shell completion if installed)
+destroy name: build
+    ./krapow destroy {{name}}
+
+# nuke every krapow-managed runner (state + VM + GitHub) in one go
+destroy-all: build
+    @./krapow status --quiet 2>/dev/null || true
+    @for n in $(ls ~/.krapow/state/ 2>/dev/null | sed 's/\.json$//'); do \
+        echo "destroying $n..."; \
+        ./krapow destroy "$n"; \
+    done
+
+# refresh the bake (deletes the published image + re-runs the full bake)
+rebake: build
+    incus image delete win-runner-base 2>/dev/null || true
+    ./krapow init win -y
