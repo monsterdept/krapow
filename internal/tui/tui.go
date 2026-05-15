@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -351,25 +352,60 @@ func isTerminal() bool {
 	return isatty.IsTerminal(os.Stdout.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
 }
 
-// lineWriter buffers Writes until it sees newlines, then sends each line as
-// a logMsg to the program. Trimmed to 120 chars for layout safety.
+// lineWriter buffers Writes until it sees a line terminator (\n or \r), then
+// sends each line as a logMsg to the program. Treats \r as a line boundary so
+// in-place progress redraws (e.g. `tart pull`'s percentage updates) become
+// real log lines rather than corrupting the bubbletea view with raw cursor
+// sequences. ANSI escape codes are stripped per-line for the same reason.
+// Lines are trimmed to 120 chars for layout safety.
 type lineWriter struct {
 	r   *Runner
 	buf bytes.Buffer
 	mu  sync.Mutex
 }
 
+// ansiCSIRe matches CSI escape sequences: ESC [ <params> <letter>. Covers
+// the cursor/clear sequences tart emits for its progress bar (e.g. ESC[1A,
+// ESC[J) plus any color/style codes upstream tools throw at us.
+var ansiCSIRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
+
 func (w *lineWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.buf.Write(p)
 	for {
-		line, err := w.buf.ReadString('\n')
-		if err == io.EOF {
-			w.buf.WriteString(line) // put back partial
+		data := w.buf.Bytes()
+		idx := -1
+		for i, b := range data {
+			if b == '\n' || b == '\r' {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			// No terminator yet; keep buffering. Reset the buffer to just the
+			// unread tail (ReadString-style "put back partial").
+			tail := make([]byte, len(data))
+			copy(tail, data)
+			w.buf.Reset()
+			w.buf.Write(tail)
 			return len(p), nil
 		}
-		line = strings.TrimRight(line, "\r\n")
+		line := string(data[:idx])
+		// Consume the terminator. If it was \r followed immediately by \n,
+		// consume both so we don't emit a spurious empty line for the \n.
+		consumed := idx + 1
+		if data[idx] == '\r' && consumed < len(data) && data[consumed] == '\n' {
+			consumed++
+		}
+		// Reset buffer to the tail.
+		tail := make([]byte, len(data)-consumed)
+		copy(tail, data[consumed:])
+		w.buf.Reset()
+		w.buf.Write(tail)
+
+		line = ansiCSIRe.ReplaceAllString(line, "")
+		line = strings.TrimRight(line, " \t")
 		if line == "" {
 			continue
 		}

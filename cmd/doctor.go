@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/rossturk/krapow/internal/config"
@@ -19,12 +20,23 @@ func doctorCmd() *cobra.Command {
 		Short: "Diagnose host readiness for krapow",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			checks := []func() checkResult{
-				checkIncusReachable,
-				checkVsock,
 				checkEnvFile,
 				checkGitHubToken,
-				checkDockerForwardConflict,
-				checkWindowsBuildDeps,
+			}
+			if runtime.GOOS == "darwin" {
+				// macOS host: tart drives mac + linux-arm runners. No incus
+				// here; the Linux-host checks are noise.
+				checks = append(checks,
+					checkTartReachable,
+					checkSshpassReachable,
+				)
+			} else {
+				checks = append(checks,
+					checkIncusReachable,
+					checkVsock,
+					checkDockerForwardConflict,
+					checkWindowsBuildDeps,
+				)
 			}
 			anyFail := false
 			for _, c := range checks {
@@ -62,6 +74,40 @@ type checkResult struct {
 	name   string
 	detail string
 	fix    string
+}
+
+func checkTartReachable() checkResult {
+	if _, err := exec.LookPath("tart"); err != nil {
+		return checkResult{
+			status: statusFail,
+			name:   "tart CLI on PATH",
+			detail: "not found",
+			fix:    "brew install cirruslabs/cli/tart",
+		}
+	}
+	// `tart list` is the cheapest probe — exits 0 and prints "[]" when no VMs
+	// exist, fails if Virtualization.framework can't initialize.
+	if out, err := exec.Command("tart", "list", "--format", "json").CombinedOutput(); err != nil {
+		return checkResult{
+			status: statusFail,
+			name:   "tart usable",
+			detail: strings.TrimSpace(string(out)),
+			fix:    "check tart install + Virtualization.framework availability",
+		}
+	}
+	return checkResult{status: statusOK, name: "tart usable"}
+}
+
+func checkSshpassReachable() checkResult {
+	if _, err := exec.LookPath("sshpass"); err != nil {
+		return checkResult{
+			status: statusWarn,
+			name:   "sshpass on PATH",
+			detail: "needed by `krapow init mac` / `init linux` on macOS — cirruslabs images use admin:admin password auth",
+			fix:    "brew install sshpass  (or: brew tap esolitos/ipa && brew install esolitos/ipa/sshpass)",
+		}
+	}
+	return checkResult{status: statusOK, name: "sshpass on PATH"}
 }
 
 func checkIncusReachable() checkResult {

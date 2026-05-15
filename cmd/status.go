@@ -10,6 +10,7 @@ import (
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/incus"
 	"github.com/rossturk/krapow/internal/state"
+	"github.com/rossturk/krapow/internal/tart"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +60,7 @@ func statusCmd() *cobra.Command {
 			fmt.Fprintln(w, "NAME\tKIND\tREPO\tVM\tRUNNER")
 			for _, r := range rs {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-					r.Name, r.Kind, r.Repo, incus.State(r.Name), runnerState(ghRunners, r))
+					r.Name, r.Kind, r.Repo, vmState(r), runnerState(ghRunners, r))
 			}
 			return w.Flush()
 		},
@@ -102,6 +103,16 @@ func runnerState(idx map[string]map[string]githubapi.Runner, r state.Runner) str
 		return "installing"
 	}
 	return gh.Status
+}
+
+// vmState returns the underlying VM state ("running", "stopped", "absent")
+// from whichever backend owns this runner. Backend is recorded at init time;
+// pre-mac records have an empty Backend and default to incus.
+func vmState(r state.Runner) string {
+	if r.EffectiveBackend() == "tart" {
+		return tart.State(r.Name)
+	}
+	return incus.State(r.Name)
 }
 
 func uniqueRepos(rs []state.Runner) []string {

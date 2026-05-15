@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -13,9 +15,11 @@ import (
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/imagebuild"
 	"github.com/rossturk/krapow/internal/incus"
+	"github.com/rossturk/krapow/internal/macssh"
 	"github.com/rossturk/krapow/internal/provision"
 	"github.com/rossturk/krapow/internal/sshkeys"
 	"github.com/rossturk/krapow/internal/state"
+	"github.com/rossturk/krapow/internal/tart"
 	"github.com/rossturk/krapow/internal/tui"
 	"github.com/rossturk/krapow/internal/winssh"
 	"github.com/spf13/cobra"
@@ -40,22 +44,48 @@ func initCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Create a runner VM and register it with GitHub",
 	}
-	c.AddCommand(initLinuxCmd(), initWinCmd())
+	c.AddCommand(initLinuxCmd(), initWinCmd(), initMacCmd())
 	return c
 }
 
 func initLinuxCmd() *cobra.Command {
 	var name, labels string
 	var plain bool
+	// On macOS hosts, `init linux` produces a Linux ARM VM via tart instead of
+	// going through Incus (which doesn't exist on macOS). The labels default
+	// gets `,arm64` appended in that case so workflows can target it sensibly.
+	defaultLabels := "self-hosted,linux,krapow"
+	if runtime.GOOS == "darwin" {
+		defaultLabels = "self-hosted,linux,arm64,krapow"
+	}
 	c := &cobra.Command{
 		Use:   "linux",
-		Short: "Launch an Ubuntu Incus VM as a Linux runner",
+		Short: "Launch a Linux runner (Ubuntu via Incus on Linux hosts; Ubuntu ARM via Tart on macOS hosts)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runInit(linuxKind, name, labels, plain)
 		},
 	}
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: linux-runner-<6 alphanum>)")
-	c.Flags().StringVar(&labels, "labels", "self-hosted,linux,krapow", "comma-separated runner labels")
+	c.Flags().StringVar(&labels, "labels", defaultLabels, "comma-separated runner labels")
+	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
+	return c
+}
+
+func initMacCmd() *cobra.Command {
+	var name, labels string
+	var plain bool
+	c := &cobra.Command{
+		Use:   "mac",
+		Short: "Launch a macOS Tart VM as a runner (macOS hosts only)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if runtime.GOOS != "darwin" {
+				return fmt.Errorf("`krapow init mac` requires a macOS host (Tart wraps Apple's Virtualization.framework); current GOOS=%s", runtime.GOOS)
+			}
+			return runInit(macKind, name, labels, plain)
+		},
+	}
+	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: mac-runner-<6 alphanum>)")
+	c.Flags().StringVar(&labels, "labels", "self-hosted,macOS,arm64,krapow", "comma-separated runner labels")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
 }
@@ -82,11 +112,14 @@ type kind int
 const (
 	linuxKind kind = iota
 	windowsKind
+	macKind
 )
 
 var (
-	linuxImage   = envOr("KRAPOW_LINUX_IMAGE", "images:ubuntu/noble/cloud")
-	windowsImage = envOr("KRAPOW_WIN_IMAGE", "local:win-runner-base")
+	linuxImage    = envOr("KRAPOW_LINUX_IMAGE", "images:ubuntu/noble/cloud")
+	windowsImage  = envOr("KRAPOW_WIN_IMAGE", "local:win-runner-base")
+	macImage      = envOr("KRAPOW_MAC_IMAGE", "ghcr.io/cirruslabs/macos-sequoia-base:latest")
+	linuxARMImage = envOr("KRAPOW_LINUX_ARM_IMAGE", "ghcr.io/cirruslabs/ubuntu-runner-arm64:24.04")
 )
 
 func envOr(k, def string) string {
@@ -144,11 +177,7 @@ func runInit(k kind, name, labels string, plain bool) error {
 		return err
 	}
 	if name == "" {
-		prefix := "linux-runner"
-		if k == windowsKind {
-			prefix = "win-runner"
-		}
-		name = fmt.Sprintf("%s-%s", prefix, randomSuffix())
+		name = fmt.Sprintf("%s-%s", kindPrefix(k), randomSuffix())
 	}
 	if s, _ := state.Load(name); s != nil {
 		return fmt.Errorf("runner %q already exists in krapow state", name)
@@ -156,31 +185,15 @@ func runInit(k kind, name, labels string, plain bool) error {
 
 	ic := &initContext{cfg: cfg, gh: githubapi.New(cfg.PAT), kind: k, name: name, labels: labels}
 
-	var phases []tui.PhaseSpec
-	if k == linuxKind {
-		phases = []tui.PhaseSpec{
-			{ID: "token", Label: "token"},
-			{ID: "launch", Label: "launch"},
-			{ID: "state", Label: "state"},
-			{ID: "cloud_init", Label: "cloud-init"},
-			{ID: "verify", Label: "verify"},
-		}
-	} else {
-		phases = []tui.PhaseSpec{
-			{ID: "token", Label: "token"},
-			{ID: "launch", Label: "launch"},
-			{ID: "ssh", Label: "ssh"},
-			{ID: "partition", Label: "partition"},
-			{ID: "register", Label: "register"},
-			{ID: "verify", Label: "verify"},
-		}
-	}
-
+	phases := phasesFor(k)
 	runner := tui.New(name, phases, plain)
 	incus.StreamOut = runner.Logger()
 	incus.StreamErr = runner.Logger()
 	winssh.StreamOut = runner.Logger()
 	winssh.StreamErr = runner.Logger()
+	tart.StreamOut = runner.Logger()
+	tart.StreamErr = runner.Logger()
+	macssh.StreamOut = runner.Logger()
 
 	var workErr error
 	go func() {
@@ -199,10 +212,62 @@ func runInit(k kind, name, labels string, plain bool) error {
 }
 
 func kindName(k kind) string {
-	if k == windowsKind {
+	switch k {
+	case windowsKind:
 		return "windows"
+	case macKind:
+		return "mac"
+	default:
+		return "linux"
 	}
-	return "linux"
+}
+
+func kindPrefix(k kind) string {
+	switch k {
+	case windowsKind:
+		return "win-runner"
+	case macKind:
+		return "mac-runner"
+	default:
+		return "linux-runner"
+	}
+}
+
+// phasesFor returns the TUI phase list for a given kind+host combo. The Mac
+// and Linux-ARM-on-Mac paths share one phase set because they share the tart
+// pull/clone/run/ssh shape.
+func phasesFor(k kind) []tui.PhaseSpec {
+	tartPhases := []tui.PhaseSpec{
+		{ID: "token", Label: "token"},
+		{ID: "pull", Label: "pull"},
+		{ID: "launch", Label: "launch"},
+		{ID: "ssh", Label: "ssh"},
+		{ID: "register", Label: "register"},
+		{ID: "verify", Label: "verify"},
+	}
+	switch {
+	case k == macKind:
+		return tartPhases
+	case k == linuxKind && runtime.GOOS == "darwin":
+		return tartPhases
+	case k == linuxKind:
+		return []tui.PhaseSpec{
+			{ID: "token", Label: "token"},
+			{ID: "launch", Label: "launch"},
+			{ID: "state", Label: "state"},
+			{ID: "cloud_init", Label: "cloud-init"},
+			{ID: "verify", Label: "verify"},
+		}
+	default: // windowsKind
+		return []tui.PhaseSpec{
+			{ID: "token", Label: "token"},
+			{ID: "launch", Label: "launch"},
+			{ID: "ssh", Label: "ssh"},
+			{ID: "partition", Label: "partition"},
+			{ID: "register", Label: "register"},
+			{ID: "verify", Label: "verify"},
+		}
+	}
 }
 
 func doInit(r *tui.Runner, ic *initContext) error {
@@ -222,10 +287,16 @@ func doInit(r *tui.Runner, ic *initContext) error {
 		RepoURL: ic.cfg.RepoURL, RegToken: ic.regToken,
 		Name: ic.name, Labels: ic.labels,
 	}
-	if ic.kind == linuxKind {
+	switch {
+	case ic.kind == macKind:
+		return doInitTart(r, ic, vars, macImage, "mac", true)
+	case ic.kind == linuxKind && runtime.GOOS == "darwin":
+		return doInitTart(r, ic, vars, linuxARMImage, "linux", false)
+	case ic.kind == linuxKind:
 		return doInitLinux(r, ic, vars)
+	default:
+		return doInitWindows(r, ic, vars)
 	}
-	return doInitWindows(r, ic, vars)
 }
 
 func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
@@ -275,6 +346,125 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	err = verifyRunnerOnline(r, ic.gh, ic.cfg.Repo, ic.name, 2*time.Minute)
 	r.End("verify", err)
 	return err
+}
+
+// doInitTart drives the macOS/Linux-ARM-via-Tart path: pull image, clone into a
+// per-runner VM, start it detached, SSH-provision the runner agent, verify.
+//
+// guestKind is what gets persisted in state.Kind ("mac" or "linux"). isMac
+// picks between the macOS and Linux-ARM provisioning scripts.
+func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, guestKind string, isMac bool) error {
+	r.Start("pull")
+	exists, err := tart.ImageExists(image)
+	if err != nil {
+		r.End("pull", err)
+		return err
+	}
+	if exists {
+		r.Log("image %s already in tart cache", image)
+	} else {
+		r.Log("tart pull %s (first pull can be 30+ GB / many minutes)", image)
+		err = tart.Pull(image)
+	}
+	r.End("pull", err)
+	if err != nil {
+		return err
+	}
+
+	r.Start("launch")
+	r.Log("tart clone %s %s", image, ic.name)
+	if err := tart.Clone(image, ic.name); err != nil {
+		r.End("launch", err)
+		return err
+	}
+	logPath, err := tartLogPath(ic.name)
+	if err != nil {
+		r.End("launch", err)
+		return err
+	}
+	r.Log("tart run --no-graphics %s (detached; logs: %s)", ic.name, logPath)
+	if err := tart.RunDetached(ic.name, logPath); err != nil {
+		r.End("launch", err)
+		return err
+	}
+	if err := state.Save(state.Runner{
+		Name: ic.name, Kind: guestKind, Backend: "tart",
+		Repo: ic.cfg.Repo, Labels: ic.labels, Created: time.Now(),
+	}); err != nil {
+		r.End("launch", err)
+		return err
+	}
+	r.End("launch", nil)
+
+	r.Start("ssh")
+	r.Log("polling tart ip + ssh port 22")
+	ip, err := waitForTartSSH(r, ic.name, 5*time.Minute)
+	if err == nil {
+		r.Log("connected: %s", ip)
+	}
+	r.End("ssh", err)
+	if err != nil {
+		return err
+	}
+
+	r.Start("register")
+	var script string
+	if isMac {
+		script, err = provision.MacProvision(vars)
+	} else {
+		script, err = provision.LinuxARMProvision(vars)
+	}
+	if err != nil {
+		r.End("register", err)
+		return err
+	}
+	r.Log("ssh admin@%s bash -s  (downloading runner, ./config.sh)", ip)
+	err = macssh.Provision(ip, script)
+	r.End("register", err)
+	if err != nil {
+		return err
+	}
+
+	r.Start("verify")
+	r.Log("polling GitHub for runner to report 'online'")
+	err = verifyRunnerOnline(r, ic.gh, ic.cfg.Repo, ic.name, 2*time.Minute)
+	r.End("verify", err)
+	return err
+}
+
+// tartLogPath returns ~/.krapow/logs/<name>.log, ensuring the dir exists.
+func tartLogPath(name string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".krapow", "logs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name+".log"), nil
+}
+
+// waitForTartSSH polls `tart ip` until the guest has a DHCP lease, then waits
+// for port 22 to accept connections. Linux ARM images come up faster than
+// macOS, so 5 minutes covers both with headroom.
+func waitForTartSSH(r *tui.Runner, name string, timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	announcedIP := false
+	for time.Now().Before(deadline) {
+		ip, err := tart.IP(name)
+		if err == nil && ip != "" {
+			if !announcedIP {
+				r.Log("IPv4 up: %s", ip)
+				announcedIP = true
+			}
+			if err := macssh.WaitForPort(ip, 30*time.Second); err == nil {
+				return ip, nil
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+	return "", fmt.Errorf("timed out waiting for tart VM %s to expose SSH", name)
 }
 
 func doInitWindows(r *tui.Runner, ic *initContext, vars provision.Vars) error {

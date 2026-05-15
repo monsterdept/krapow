@@ -7,6 +7,7 @@ import (
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/incus"
 	"github.com/rossturk/krapow/internal/state"
+	"github.com/rossturk/krapow/internal/tart"
 	"github.com/spf13/cobra"
 )
 
@@ -79,6 +80,19 @@ func doStopOrDestroy(name string, destroy bool) error {
 		if err := gh.DeleteRunner(s.Repo, r.ID); err != nil {
 			return err
 		}
+	}
+
+	if s.EffectiveBackend() == "tart" {
+		if destroy {
+			fmt.Printf("==> destroying tart VM %s\n", name)
+			// Best-effort stop first — `tart delete` refuses a running VM.
+			_ = tart.Stop(name, 30)
+			_ = tart.Delete(name)
+			return state.Remove(name)
+		}
+		fmt.Printf("==> stopping tart VM %s\n", name)
+		_ = tart.Stop(name, 30)
+		return nil
 	}
 
 	if destroy {

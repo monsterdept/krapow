@@ -12,10 +12,20 @@ import (
 
 type Runner struct {
 	Name    string    `json:"name"`
-	Kind    string    `json:"kind"` // "linux" or "windows"
-	Repo    string    `json:"repo"` // owner/name
+	Kind    string    `json:"kind"`              // "linux", "windows", or "mac"
+	Backend string    `json:"backend,omitempty"` // "incus" or "tart"; empty == "incus" (pre-mac records)
+	Repo    string    `json:"repo"`              // owner/name
 	Labels  string    `json:"labels"`
 	Created time.Time `json:"created"`
+}
+
+// EffectiveBackend returns r.Backend with the legacy default ("incus") applied
+// so consumers can branch without sprinkling empty-string checks everywhere.
+func (r *Runner) EffectiveBackend() string {
+	if r.Backend == "" {
+		return "incus"
+	}
+	return r.Backend
 }
 
 func dir() (string, error) {
