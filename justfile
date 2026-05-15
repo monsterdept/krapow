@@ -43,6 +43,10 @@ linux: build
 win: build
     ./krapow init win
 
+# spawn a fresh macOS runner (macOS hosts only; uses tart)
+mac: build
+    ./krapow init mac
+
 # destroy a runner by name (tab-completes via shell completion if installed)
 destroy name: build
     ./krapow destroy {{name}}
@@ -55,7 +59,14 @@ destroy-all: build
         ./krapow destroy "$n"; \
     done
 
+# nuke any stranded bake VMs left over from failed/aborted bake attempts
+clean-bakes:
+    @for n in $(incus list -c n --format csv 2>/dev/null | grep '^krapow-win-bake-\|^rowner-win-bake-'); do \
+        echo "deleting $n..."; \
+        incus delete --force "$n"; \
+    done
+
 # refresh the bake (deletes the published image + re-runs the full bake)
-rebake: build
+rebake: build clean-bakes
     incus image delete win-runner-base 2>/dev/null || true
     ./krapow init win -y

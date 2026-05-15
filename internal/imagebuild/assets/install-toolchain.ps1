@@ -4,6 +4,9 @@
 #
 #   - Visual Studio 2022 Build Tools with the C++ workload + ARM64 cross-tools
 #   - Chocolatey package manager
+#   - Git for Windows (provides bash.exe, required by many `shell: bash`
+#     workflow steps — e.g. dtolnay/rust-toolchain — that GitHub-hosted just
+#     "happens to have" because git ships in their base image)
 #
 # Anything beyond this — language toolchains (Rust, Node, Python), project-
 # specific deps — is the workflow's job, installed via setup-* actions.
@@ -51,6 +54,16 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
         [Environment]::SetEnvironmentVariable('Path',
             "$machinePath;C:\ProgramData\chocolatey\bin", 'Machine')
     }
+}
+# Refresh this session's PATH so the just-installed choco is callable below.
+$env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+            [Environment]::GetEnvironmentVariable('Path', 'User')
+
+# ---------- Git for Windows (bash.exe for `shell: bash` workflow steps) ----------
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Git for Windows..."
+    & choco install -y git --no-progress | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "choco install git failed: exit $LASTEXITCODE" }
 }
 
 Write-Host "krapow toolchain installed"
