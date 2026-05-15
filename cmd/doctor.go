@@ -8,9 +8,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/auth"
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/imagebuild"
+	"github.com/rossturk/krapow/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +21,7 @@ func doctorCmd() *cobra.Command {
 		Short: "Diagnose host readiness for krapow",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			checks := []func() checkResult{
-				checkEnvFile,
+				checkAuth,
 				checkGitHubToken,
 			}
 			if runtime.GOOS == "darwin" {
@@ -142,39 +143,60 @@ func checkVsock() checkResult {
 	}
 }
 
-func checkEnvFile() checkResult {
-	_, err := config.Load(".env")
+func checkAuth() checkResult {
+	_, src, err := auth.Token()
 	if err != nil {
 		return checkResult{
 			status: statusFail,
-			name:   ".env present and valid",
+			name:   "GitHub token resolvable",
 			detail: err.Error(),
-			fix:    "create .env with PAT=ghp_... and REPO_URL=https://github.com/owner/repo",
+			fix:    "export GITHUB_TOKEN=ghp_... or run `gh auth login`",
 		}
 	}
-	return checkResult{status: statusOK, name: ".env present and valid"}
+	return checkResult{status: statusOK, name: "GitHub token resolvable", detail: "via " + string(src)}
 }
 
 func checkGitHubToken() checkResult {
-	cfg, err := config.Load(".env")
+	tok, _, err := auth.Token()
 	if err != nil {
 		return checkResult{
 			status: statusWarn,
 			name:   "GitHub token works",
-			detail: "skipped (.env not valid)",
+			detail: "skipped (no token resolvable)",
+		}
+	}
+	// We need a repo to probe. If no runners are registered yet, we can't
+	// know which repo the user intends to use — fall back to a token-only
+	// validity check via /user. That doesn't prove repo-level scope but it
+	// at least catches a stale/revoked token.
+	runners, _ := state.All()
+	gh := githubapi.New(tok)
+	if len(runners) == 0 {
+		if err := gh.WhoAmI(); err != nil {
+			return checkResult{
+				status: statusFail,
+				name:   "GitHub token works",
+				detail: err.Error(),
+				fix:    "regenerate token; classic PAT needs 'repo'; fine-grained needs 'admin:repo runners'",
+			}
+		}
+		return checkResult{
+			status: statusOK,
+			name:   "GitHub token works",
+			detail: "no runners yet — repo-scope unverified (will check on first init)",
 		}
 	}
 	// FindRunner is the cheapest probe that exercises auth + repo access without minting a token.
-	gh := githubapi.New(cfg.PAT)
-	if _, err := gh.FindRunner(cfg.Repo, "__krapow-doctor-probe__"); err != nil {
+	repo := runners[0].Repo
+	if _, err := gh.FindRunner(repo, "__krapow-doctor-probe__"); err != nil {
 		return checkResult{
 			status: statusFail,
-			name:   "GitHub token works for " + cfg.Repo,
+			name:   "GitHub token works for " + repo,
 			detail: err.Error(),
-			fix:    "regenerate PAT with 'repo' scope (classic) or fine-grained 'admin:repo runners'",
+			fix:    "regenerate token; classic PAT needs 'repo'; fine-grained needs 'admin:repo runners'",
 		}
 	}
-	return checkResult{status: statusOK, name: "GitHub token works for " + cfg.Repo}
+	return checkResult{status: statusOK, name: "GitHub token works for " + repo}
 }
 
 func checkWindowsBuildDeps() checkResult {

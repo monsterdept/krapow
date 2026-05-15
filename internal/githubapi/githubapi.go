@@ -73,6 +73,12 @@ func (c *Client) DeleteRunner(repo string, id int64) error {
 	return c.do(http.MethodDelete, fmt.Sprintf("/repos/%s/actions/runners/%d", repo, id), nil)
 }
 
+// WhoAmI checks that the token is accepted by GitHub at all. Doesn't prove
+// any particular scope — just that the token isn't expired or revoked.
+func (c *Client) WhoAmI() error {
+	return c.do(http.MethodGet, "/user", nil)
+}
+
 // ErrNotFound is returned when GetFile cannot locate the requested path.
 var ErrNotFound = fmt.Errorf("not found")
 

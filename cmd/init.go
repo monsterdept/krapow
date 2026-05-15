@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/auth"
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/imagebuild"
 	"github.com/rossturk/krapow/internal/incus"
@@ -49,7 +50,7 @@ func initCmd() *cobra.Command {
 }
 
 func initLinuxCmd() *cobra.Command {
-	var name, labels string
+	var name, labels, repo string
 	var plain bool
 	// On macOS hosts, `init linux` produces a Linux ARM VM via tart instead of
 	// going through Incus (which doesn't exist on macOS). The labels default
@@ -62,9 +63,10 @@ func initLinuxCmd() *cobra.Command {
 		Use:   "linux",
 		Short: "Launch a Linux runner (Ubuntu via Incus on Linux hosts; Ubuntu ARM via Tart on macOS hosts)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runInit(linuxKind, name, labels, plain)
+			return runInit(linuxKind, name, labels, repo, plain)
 		},
 	}
+	addRepoFlag(c, &repo)
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: linux-runner-<6 alphanum>)")
 	c.Flags().StringVar(&labels, "labels", defaultLabels, "comma-separated runner labels")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
@@ -72,7 +74,7 @@ func initLinuxCmd() *cobra.Command {
 }
 
 func initMacCmd() *cobra.Command {
-	var name, labels string
+	var name, labels, repo string
 	var plain bool
 	c := &cobra.Command{
 		Use:   "mac",
@@ -81,9 +83,10 @@ func initMacCmd() *cobra.Command {
 			if runtime.GOOS != "darwin" {
 				return fmt.Errorf("`krapow init mac` requires a macOS host (Tart wraps Apple's Virtualization.framework); current GOOS=%s", runtime.GOOS)
 			}
-			return runInit(macKind, name, labels, plain)
+			return runInit(macKind, name, labels, repo, plain)
 		},
 	}
+	addRepoFlag(c, &repo)
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: mac-runner-<6 alphanum>)")
 	c.Flags().StringVar(&labels, "labels", "self-hosted,macOS,arm64,krapow", "comma-separated runner labels")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
@@ -91,20 +94,44 @@ func initMacCmd() *cobra.Command {
 }
 
 func initWinCmd() *cobra.Command {
-	var name, labels string
+	var name, labels, repo string
 	var yesBuild, plain bool
 	c := &cobra.Command{
 		Use:   "win",
 		Short: "Launch a Windows Incus VM as a runner (auto-bakes base image on first run)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runInitWin(name, labels, yesBuild, plain)
+			return runInitWin(name, labels, repo, yesBuild, plain)
 		},
 	}
+	addRepoFlag(c, &repo)
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: win-runner-<6 alphanum>)")
 	c.Flags().StringVar(&labels, "labels", "self-hosted,windows,krapow", "comma-separated runner labels")
 	c.Flags().BoolVarP(&yesBuild, "yes", "y", false, "skip the confirmation prompt before kicking off a base-image build")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
+}
+
+func addRepoFlag(c *cobra.Command, repo *string) {
+	c.Flags().StringVar(repo, "repo", "", "GitHub repository in owner/name form (required)")
+	_ = c.MarkFlagRequired("repo")
+}
+
+// parseRepo accepts either "owner/name" or a full https URL and returns the
+// normalized "owner/name" form. Used by `init --repo`.
+func parseRepo(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, ".git")
+	if strings.Contains(s, "://") {
+		u, err := url.Parse(s)
+		if err != nil {
+			return "", fmt.Errorf("--repo %q: %w", s, err)
+		}
+		s = strings.Trim(u.Path, "/")
+	}
+	if strings.Count(s, "/") != 1 || strings.HasPrefix(s, "/") || strings.HasSuffix(s, "/") {
+		return "", fmt.Errorf("--repo %q is not owner/name", s)
+	}
+	return s, nil
 }
 
 type kind int
@@ -129,7 +156,7 @@ func envOr(k, def string) string {
 	return def
 }
 
-func runInitWin(name, labels string, yesBuild, plain bool) error {
+func runInitWin(name, labels, repo string, yesBuild, plain bool) error {
 	exists, err := incus.ImageExists(windowsImage)
 	if err != nil {
 		return err
@@ -148,7 +175,7 @@ func runInitWin(name, labels string, yesBuild, plain bool) error {
 			return err
 		}
 	}
-	return runInit(windowsKind, name, labels, plain)
+	return runInit(windowsKind, name, labels, repo, plain)
 }
 
 func readYes() bool {
@@ -162,19 +189,30 @@ func readYes() bool {
 
 // initContext bundles everything a phase needs.
 type initContext struct {
-	cfg      *config.Config
 	gh       *githubapi.Client
 	kind     kind
 	name     string
 	labels   string
+	repo     string // "owner/name"
+	repoURL  string // "https://github.com/owner/name"
 	regToken string
 	vmIP     string // populated by Windows ssh phase
 }
 
-func runInit(k kind, name, labels string, plain bool) error {
-	cfg, err := config.Load(".env")
+func runInit(k kind, name, labels, repoFlag string, plain bool) error {
+	repo, err := parseRepo(repoFlag)
 	if err != nil {
 		return err
+	}
+	tok, _, err := auth.Token()
+	if err != nil {
+		return err
+	}
+	gh := githubapi.New(tok)
+	// Preflight: confirm the token can see this repo's runners before we boot
+	// a VM. Cheaper to fail here than 5 minutes into a tart pull.
+	if _, err := gh.ListRunners(repo); err != nil {
+		return fmt.Errorf("cannot access %s with current token: %w", repo, err)
 	}
 	if name == "" {
 		name = fmt.Sprintf("%s-%s", kindPrefix(k), randomSuffix())
@@ -183,7 +221,14 @@ func runInit(k kind, name, labels string, plain bool) error {
 		return fmt.Errorf("runner %q already exists in krapow state", name)
 	}
 
-	ic := &initContext{cfg: cfg, gh: githubapi.New(cfg.PAT), kind: k, name: name, labels: labels}
+	ic := &initContext{
+		gh:      gh,
+		kind:    k,
+		name:    name,
+		labels:  labels,
+		repo:    repo,
+		repoURL: "https://github.com/" + repo,
+	}
 
 	phases := phasesFor(k)
 	runner := tui.New(name, phases, plain)
@@ -272,8 +317,8 @@ func phasesFor(k kind) []tui.PhaseSpec {
 
 func doInit(r *tui.Runner, ic *initContext) error {
 	r.Start("token")
-	r.Log("POST /repos/%s/actions/runners/registration-token", ic.cfg.Repo)
-	tok, err := ic.gh.RegistrationToken(ic.cfg.Repo)
+	r.Log("POST /repos/%s/actions/runners/registration-token", ic.repo)
+	tok, err := ic.gh.RegistrationToken(ic.repo)
 	if err == nil {
 		r.Log("token issued (1h ttl)")
 	}
@@ -284,7 +329,7 @@ func doInit(r *tui.Runner, ic *initContext) error {
 	ic.regToken = tok
 
 	vars := provision.Vars{
-		RepoURL: ic.cfg.RepoURL, RegToken: ic.regToken,
+		RepoURL: ic.repoURL, RegToken: ic.regToken,
 		Name: ic.name, Labels: ic.labels,
 	}
 	switch {
@@ -324,7 +369,7 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	r.Start("state")
 	r.Log("writing ~/.krapow/state/%s.json", ic.name)
 	err = state.Save(state.Runner{
-		Name: ic.name, Kind: "linux", Repo: ic.cfg.Repo,
+		Name: ic.name, Kind: "linux", Repo: ic.repo,
 		Labels: ic.labels, Created: time.Now(),
 	})
 	r.End("state", err)
@@ -343,7 +388,7 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 
 	r.Start("verify")
 	r.Log("polling GitHub for runner to report 'online'")
-	err = verifyRunnerOnline(r, ic.gh, ic.cfg.Repo, ic.name, 2*time.Minute)
+	err = verifyRunnerOnline(r, ic.gh, ic.repo, ic.name, 2*time.Minute)
 	r.End("verify", err)
 	return err
 }
@@ -389,7 +434,7 @@ func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, gues
 	}
 	if err := state.Save(state.Runner{
 		Name: ic.name, Kind: guestKind, Backend: "tart",
-		Repo: ic.cfg.Repo, Labels: ic.labels, Created: time.Now(),
+		Repo: ic.repo, Labels: ic.labels, Created: time.Now(),
 	}); err != nil {
 		r.End("launch", err)
 		return err
@@ -427,7 +472,7 @@ func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, gues
 
 	r.Start("verify")
 	r.Log("polling GitHub for runner to report 'online'")
-	err = verifyRunnerOnline(r, ic.gh, ic.cfg.Repo, ic.name, 2*time.Minute)
+	err = verifyRunnerOnline(r, ic.gh, ic.repo, ic.name, 2*time.Minute)
 	r.End("verify", err)
 	return err
 }
@@ -482,7 +527,7 @@ func doInitWindows(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	if err == nil {
 		r.Log("VM started; writing state file")
 		err = state.Save(state.Runner{
-			Name: ic.name, Kind: "windows", Repo: ic.cfg.Repo,
+			Name: ic.name, Kind: "windows", Repo: ic.repo,
 			Labels: ic.labels, Created: time.Now(),
 		})
 	}
@@ -544,7 +589,7 @@ if ($max -gt $cur) {
 
 	r.Start("verify")
 	r.Log("polling GitHub for runner to report 'online'")
-	err = verifyRunnerOnline(r, ic.gh, ic.cfg.Repo, ic.name, 2*time.Minute)
+	err = verifyRunnerOnline(r, ic.gh, ic.repo, ic.name, 2*time.Minute)
 	r.End("verify", err)
 	return err
 }

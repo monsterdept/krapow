@@ -6,7 +6,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/auth"
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/incus"
 	"github.com/rossturk/krapow/internal/state"
@@ -36,16 +36,13 @@ func statusCmd() *cobra.Command {
 
 			// Look up runner state on GitHub. Build a name->runner index per
 			// repo so we only hit the API once per repo even with many runners.
+			// If we can't resolve a token, every row falls back to "unknown"
+			// — that's intentional; status is read-only and should still print
+			// the state we have locally.
 			ghRunners := map[string]map[string]githubapi.Runner{}
-			if cfg, err := config.Load(".env"); err == nil {
-				// We only know how to talk to the repo in .env; if a state row
-				// references a different repo we leave its RUNNER cell blank.
-				gh := githubapi.New(cfg.PAT)
-				repos := uniqueRepos(rs)
-				for _, repo := range repos {
-					if repo != cfg.Repo {
-						continue
-					}
+			if tok, _, err := auth.Token(); err == nil {
+				gh := githubapi.New(tok)
+				for _, repo := range uniqueRepos(rs) {
 					if list, err := gh.ListRunners(repo); err == nil {
 						idx := map[string]githubapi.Runner{}
 						for _, r := range list {

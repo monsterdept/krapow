@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/rossturk/krapow/internal/config"
+	"github.com/rossturk/krapow/internal/auth"
 	"github.com/rossturk/krapow/internal/githubapi"
 	"github.com/rossturk/krapow/internal/incus"
 	"github.com/rossturk/krapow/internal/state"
@@ -63,11 +63,11 @@ func doStopOrDestroy(name string, destroy bool) error {
 	if s == nil {
 		return fmt.Errorf("no krapow state for %q", name)
 	}
-	cfg, err := config.Load(".env")
+	tok, _, err := auth.Token()
 	if err != nil {
 		return err
 	}
-	gh := githubapi.New(cfg.PAT)
+	gh := githubapi.New(tok)
 
 	r, err := gh.FindRunner(s.Repo, name)
 	if err != nil {
