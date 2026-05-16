@@ -1,4 +1,11 @@
 #cloud-config
+# Grow the root partition + filesystem to fill the Incus-provisioned disk.
+# `root.size` extends /dev/sda, but the Incus-built Ubuntu cloud image ships
+# /dev/sda2 sized to the image (~20 GiB) and its cloud-init doesn't grow it
+# on first boot — without this, df stays at 20G even on a 75 GiB volume.
+bootcmd:
+  - growpart /dev/sda 2 || true
+  - resize2fs /dev/sda2 || true
 package_update: true
 # krapow base toolchain: aiming for parity with what GitHub-hosted
 # ubuntu-latest ships pre-installed. Language toolchains (rust/node/python/

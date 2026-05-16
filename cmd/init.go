@@ -348,13 +348,15 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	}
 	r.Start("boot")
 	r.Log("incus launch %s %s --vm", linuxImage, ic.name)
-	r.Log("  cpus=4  memory=8GiB  root=20GiB")
+	r.Log("  cpus=4  memory=8GiB  root=75GiB")
+	// 75 GiB matches GitHub's ubuntu-latest hosted-runner free disk (~74 GB
+	// on a ~84 GB volume), so jobs that assume that headroom won't surprise.
 	err = incus.LaunchVM(linuxImage, ic.name, map[string]string{
 		"user.user-data":      userData,
 		"security.secureboot": "false",
 		"limits.cpu":          "4",
 		"limits.memory":       "8GiB",
-	}, map[string]string{"root.size": "20GiB"})
+	}, map[string]string{"root.size": "75GiB"})
 	if err == nil {
 		r.Log("VM started (cloud-init now running async inside the guest)")
 		r.Log("writing ~/.krapow/state/%s.json", ic.name)
