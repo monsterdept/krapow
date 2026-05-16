@@ -283,12 +283,11 @@ func kindPrefix(k kind) string {
 // pull/clone/run/ssh shape.
 func phasesFor(k kind) []tui.PhaseSpec {
 	tartPhases := []tui.PhaseSpec{
-		{ID: "token", Label: "token"},
-		{ID: "pull", Label: "pull"},
-		{ID: "launch", Label: "launch"},
-		{ID: "ssh", Label: "ssh"},
-		{ID: "register", Label: "register"},
-		{ID: "verify", Label: "verify"},
+		{ID: "register", Label: "Register"},
+		{ID: "pull", Label: "Pull"},
+		{ID: "boot", Label: "Boot"},
+		{ID: "activate", Label: "Activate"},
+		{ID: "verify", Label: "Verify"},
 	}
 	switch {
 	case k == macKind:
@@ -297,32 +296,30 @@ func phasesFor(k kind) []tui.PhaseSpec {
 		return tartPhases
 	case k == linuxKind:
 		return []tui.PhaseSpec{
-			{ID: "token", Label: "token"},
-			{ID: "launch", Label: "launch"},
-			{ID: "state", Label: "state"},
-			{ID: "cloud_init", Label: "cloud-init"},
-			{ID: "verify", Label: "verify"},
+			{ID: "register", Label: "Register"},
+			{ID: "boot", Label: "Boot"},
+			{ID: "cloud_init", Label: "Cloud-init"},
+			{ID: "verify", Label: "Verify"},
 		}
 	default: // windowsKind
 		return []tui.PhaseSpec{
-			{ID: "token", Label: "token"},
-			{ID: "launch", Label: "launch"},
-			{ID: "ssh", Label: "ssh"},
-			{ID: "partition", Label: "partition"},
-			{ID: "register", Label: "register"},
-			{ID: "verify", Label: "verify"},
+			{ID: "register", Label: "Register"},
+			{ID: "boot", Label: "Boot"},
+			{ID: "partition", Label: "Partition"},
+			{ID: "activate", Label: "Activate"},
+			{ID: "verify", Label: "Verify"},
 		}
 	}
 }
 
 func doInit(r *tui.Runner, ic *initContext) error {
-	r.Start("token")
+	r.Start("register")
 	r.Log("POST /repos/%s/actions/runners/registration-token", ic.repo)
 	tok, err := ic.gh.RegistrationToken(ic.repo)
 	if err == nil {
 		r.Log("token issued (1h ttl)")
 	}
-	r.End("token", err)
+	r.End("register", err)
 	if err != nil {
 		return err
 	}
@@ -349,7 +346,7 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	if err != nil {
 		return err
 	}
-	r.Start("launch")
+	r.Start("boot")
 	r.Log("incus launch %s %s --vm", linuxImage, ic.name)
 	r.Log("  cpus=4  memory=8GiB  root=20GiB")
 	err = incus.LaunchVM(linuxImage, ic.name, map[string]string{
@@ -360,19 +357,13 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	}, map[string]string{"root.size": "20GiB"})
 	if err == nil {
 		r.Log("VM started (cloud-init now running async inside the guest)")
+		r.Log("writing ~/.krapow/state/%s.json", ic.name)
+		err = state.Save(state.Runner{
+			Name: ic.name, Kind: "linux", Repo: ic.repo,
+			Labels: ic.labels, Created: time.Now(),
+		})
 	}
-	r.End("launch", err)
-	if err != nil {
-		return err
-	}
-
-	r.Start("state")
-	r.Log("writing ~/.krapow/state/%s.json", ic.name)
-	err = state.Save(state.Runner{
-		Name: ic.name, Kind: "linux", Repo: ic.repo,
-		Labels: ic.labels, Created: time.Now(),
-	})
-	r.End("state", err)
+	r.End("boot", err)
 	if err != nil {
 		return err
 	}
@@ -416,43 +407,40 @@ func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, gues
 		return err
 	}
 
-	r.Start("launch")
+	r.Start("boot")
 	r.Log("tart clone %s %s", image, ic.name)
 	if err := tart.Clone(image, ic.name); err != nil {
-		r.End("launch", err)
+		r.End("boot", err)
 		return err
 	}
 	logPath, err := tartLogPath(ic.name)
 	if err != nil {
-		r.End("launch", err)
+		r.End("boot", err)
 		return err
 	}
 	r.Log("tart run --no-graphics %s (detached; logs: %s)", ic.name, logPath)
 	if err := tart.RunDetached(ic.name, logPath); err != nil {
-		r.End("launch", err)
+		r.End("boot", err)
 		return err
 	}
 	if err := state.Save(state.Runner{
 		Name: ic.name, Kind: guestKind, Backend: "tart",
 		Repo: ic.repo, Labels: ic.labels, Created: time.Now(),
 	}); err != nil {
-		r.End("launch", err)
+		r.End("boot", err)
 		return err
 	}
-	r.End("launch", nil)
-
-	r.Start("ssh")
 	r.Log("polling tart ip + ssh port 22")
 	ip, err := waitForTartSSH(r, ic.name, 5*time.Minute)
 	if err == nil {
 		r.Log("connected: %s", ip)
 	}
-	r.End("ssh", err)
+	r.End("boot", err)
 	if err != nil {
 		return err
 	}
 
-	r.Start("register")
+	r.Start("activate")
 	var script string
 	if isMac {
 		script, err = provision.MacProvision(vars)
@@ -460,12 +448,12 @@ func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, gues
 		script, err = provision.LinuxARMProvision(vars)
 	}
 	if err != nil {
-		r.End("register", err)
+		r.End("activate", err)
 		return err
 	}
 	r.Log("ssh admin@%s bash -s  (downloading runner, ./config.sh)", ip)
 	err = macssh.Provision(ip, script)
-	r.End("register", err)
+	r.End("activate", err)
 	if err != nil {
 		return err
 	}
@@ -513,7 +501,7 @@ func waitForTartSSH(r *tui.Runner, name string, timeout time.Duration) (string, 
 }
 
 func doInitWindows(r *tui.Runner, ic *initContext, vars provision.Vars) error {
-	r.Start("launch")
+	r.Start("boot")
 	r.Log("incus launch %s %s --vm", windowsImage, ic.name)
 	r.Log("  cpus=4  memory=8GiB  root=60GiB")
 	// Must be >= the published base image's disk size (60 GiB — set in the
@@ -531,18 +519,17 @@ func doInitWindows(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 			Labels: ic.labels, Created: time.Now(),
 		})
 	}
-	r.End("launch", err)
 	if err != nil {
+		r.End("boot", err)
 		return err
 	}
 
-	r.Start("ssh")
 	r.Log("polling DHCP for IPv4 + SSH port 22 (Windows boot ~3-5 min)")
 	ip, err := waitForWindowsSSHLogged(r, ic.name, 15*time.Minute)
 	if err == nil {
 		r.Log("connected: %s", ip)
 	}
-	r.End("ssh", err)
+	r.End("boot", err)
 	if err != nil {
 		return err
 	}
@@ -579,10 +566,10 @@ if ($max -gt $cur) {
 	if err != nil {
 		return err
 	}
-	r.Start("register")
+	r.Start("activate")
 	r.Log("downloading actions-runner-win-x64 release & running config.cmd")
 	_, err = c.RunPowerShell(ps1)
-	r.End("register", err)
+	r.End("activate", err)
 	if err != nil {
 		return err
 	}

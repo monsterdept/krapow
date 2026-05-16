@@ -8,7 +8,7 @@
 //
 // Phases driven by the TUI:
 //
-//	iso → repack → answer → install → toolchain → sysprep → publish
+//	download → prepare → install → provision → publish
 package imagebuild
 
 import (
@@ -131,13 +131,11 @@ func Build(targetAlias string) error {
 	}
 
 	runner := tui.New("bake "+targetAlias, []tui.PhaseSpec{
-		{ID: "iso", Label: "iso"},
-		{ID: "repack", Label: "repack"},
-		{ID: "answer", Label: "answer"},
-		{ID: "install", Label: "install"},
-		{ID: "toolchain", Label: "toolchain"},
-		{ID: "shutdown", Label: "shutdown"},
-		{ID: "publish", Label: "publish"},
+		{ID: "download", Label: "Download"},
+		{ID: "prepare", Label: "Prepare"},
+		{ID: "install", Label: "Install"},
+		{ID: "provision", Label: "Provision"},
+		{ID: "publish", Label: "Publish"},
 	}, false)
 
 	// Route every subprocess writer through the TUI viewport for the bake's
@@ -175,16 +173,16 @@ func doBake(r *tui.Runner, targetAlias string) error {
 		return err
 	}
 
-	// ---------- iso ----------
-	r.Start("iso")
+	// ---------- download ----------
+	r.Start("download")
 	winISO := os.Getenv("WINDOWS_ISO")
 	if winISO == "" {
 		winISO = filepath.Join(cache, "windows-server-2022-eval.iso")
 		r.Log("Windows Server 2022 Eval → %s", winISO)
 		if err := ensureDownload(winISO, winISOURL, winISOSHA256, func(s string) {
-			r.SetDetail("iso", s)
+			r.SetDetail("download", s)
 		}); err != nil {
-			r.End("iso", err)
+			r.End("download", err)
 			return fmt.Errorf("download Windows ISO: %w", err)
 		}
 	} else {
@@ -193,48 +191,44 @@ func doBake(r *tui.Runner, targetAlias string) error {
 	virtioISO := filepath.Join(cache, "virtio-win.iso")
 	r.Log("virtio-win → %s", virtioISO)
 	if err := ensureDownload(virtioISO, virtioISOURL, "", func(s string) {
-		r.SetDetail("iso", s)
+		r.SetDetail("download", s)
 	}); err != nil {
-		r.End("iso", err)
+		r.End("download", err)
 		return fmt.Errorf("download virtio-win ISO: %w", err)
 	}
-	r.End("iso", nil)
+	r.End("download", nil)
 
-	// ---------- repack ----------
-	r.Start("repack")
+	// ---------- prepare ----------
+	r.Start("prepare")
 	r.Log("distrobuilder repack-windows (injects virtio drivers into install.wim)")
 	repackedISO := filepath.Join(work, "windows-incus.iso")
 	if err := repackWindows(winISO, repackedISO, virtioISO); err != nil {
-		r.End("repack", err)
+		r.End("prepare", err)
 		return fmt.Errorf("repack ISO: %w", err)
 	}
-	r.End("repack", nil)
-
-	// ---------- answer ----------
-	r.Start("answer")
 	r.Log("building answer ISO (autounattend.xml + setup-ssh.ps1)")
 	unattendPath := filepath.Join(work, "autounattend.xml")
 	if err := writeAsset("assets/autounattend.xml", unattendPath); err != nil {
-		r.End("answer", err)
+		r.End("prepare", err)
 		return err
 	}
 	pubKey, err := sshkeys.PublicKey()
 	if err != nil {
-		r.End("answer", err)
+		r.End("prepare", err)
 		return fmt.Errorf("ensure ssh keypair: %w", err)
 	}
 	setupSSHPath := filepath.Join(work, "setup-ssh.ps1")
 	if err := renderAsset("assets/setup-ssh.ps1.tmpl", setupSSHPath,
 		map[string]string{"PubKey": pubKey}); err != nil {
-		r.End("answer", err)
+		r.End("prepare", err)
 		return err
 	}
 	answerISO := filepath.Join(work, "krapow-answer.iso")
 	if err := buildAnswerISO(answerISO, unattendPath, setupSSHPath); err != nil {
-		r.End("answer", err)
+		r.End("prepare", err)
 		return fmt.Errorf("build answer ISO: %w", err)
 	}
-	r.End("answer", nil)
+	r.End("prepare", nil)
 
 	// ---------- install ----------
 	bakeInstance := "krapow-win-bake-" + fmt.Sprint(time.Now().Unix())
@@ -250,20 +244,28 @@ func doBake(r *tui.Runner, targetAlias string) error {
 	}
 	r.End("install", nil)
 
-	// ---------- toolchain ----------
-	r.Start("toolchain")
+	// ---------- provision ----------
+	r.Start("provision")
 	r.Log("SSHing into bake VM, installing VS 2022 Build Tools + chocolatey (~15 min)")
 	if err := installToolchain(bakeInstance); err != nil {
-		r.End("toolchain", err)
+		r.End("provision", err)
 		fmt.Fprintf(os.Stderr, "\ntoolchain install failed; %s left in place for debugging.\n", bakeInstance)
 		return fmt.Errorf("install toolchain: %w", err)
 	}
-	r.End("toolchain", nil)
+	if err := shutdownBake(r, bakeInstance); err != nil {
+		r.End("provision", err)
+		fmt.Fprintf(os.Stderr, "\nshutdown failed; %s left in place for debugging.\n", bakeInstance)
+		return fmt.Errorf("shutdown: %w", err)
+	}
+	r.End("provision", nil)
 
-	// ---------- sysprep + publish ----------
-	if err := finalizeBake(r, bakeInstance, targetAlias); err != nil {
-		fmt.Fprintf(os.Stderr, "\nfinalize failed; %s left in place for debugging.\n", bakeInstance)
-		return fmt.Errorf("finalize: %w", err)
+	// ---------- publish ----------
+	r.Start("publish")
+	err = publishBake(r, bakeInstance, targetAlias)
+	r.End("publish", err)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\npublish failed; %s left in place for debugging.\n", bakeInstance)
+		return fmt.Errorf("publish: %w", err)
 	}
 	_ = incus.Delete(bakeInstance)
 	return nil
@@ -640,7 +642,7 @@ func installToolchain(name string) error {
 	return err
 }
 
-// ---------- phase: finalize (shutdown + publish) ----------
+// ---------- shutdown + publish ----------
 //
 // We deliberately do NOT run sysprep. Twice in development sysprep silently
 // failed during `Sysprep_Clean_Validate_Opk` and never shut the VM down,
@@ -652,30 +654,29 @@ func installToolchain(name string) error {
 //   - Skipping sysprep keeps the bake reliable. Cost is a slightly larger
 //     image (no /generalize cleanup of install caches) — measured at ~1-2 GB.
 
-func finalizeBake(r *tui.Runner, name, alias string) error {
-	r.Start("shutdown")
-	// Graceful shutdown is REQUIRED, not a nicety. `incus stop --force` is
-	// equivalent to pulling the plug — Windows doesn't get to flush the
-	// registry, and machine-PATH updates from chocolatey / Git for Windows
-	// (written by install-toolchain.ps1) end up only in memory. The image
-	// then captures a disk where the .exes are present but PATH still points
-	// at System32 only, so workflows like dtolnay/rust-toolchain fail with
-	// "bash: command not found" even though git.exe is sitting there.
+// shutdownBake is the tail end of the `provision` phase: it gracefully shuts
+// down the bake VM via SSH so the registry (incl. Machine PATH written by
+// installToolchain) flushes to disk.
+//
+// Graceful shutdown is REQUIRED, not a nicety. `incus stop --force` is
+// equivalent to pulling the plug — Windows doesn't get to flush the registry,
+// and machine-PATH updates from chocolatey / Git for Windows (written by
+// install-toolchain.ps1) end up only in memory. The image then captures a
+// disk where the .exes are present but PATH still points at System32 only, so
+// workflows like dtolnay/rust-toolchain fail with "bash: command not found"
+// even though git.exe is sitting there.
+func shutdownBake(r *tui.Runner, name string) error {
 	r.Log("sending Windows graceful shutdown via SSH (flushes registry)")
 	privPath, _, err := sshkeys.EnsureKeyPair()
 	if err != nil {
-		r.End("shutdown", err)
 		return err
 	}
 	ip := vmIPv4(name)
 	if ip == "" {
-		err := fmt.Errorf("bake VM %s has no IPv4; cannot graceful-shutdown", name)
-		r.End("shutdown", err)
-		return err
+		return fmt.Errorf("bake VM %s has no IPv4; cannot graceful-shutdown", name)
 	}
 	c, err := winssh.Dial(ip, privPath, 30*time.Second)
 	if err != nil {
-		r.End("shutdown", err)
 		return err
 	}
 	// shutdown /s /t 0 — initiate immediate clean shutdown; Windows takes ~30s
@@ -695,13 +696,15 @@ func finalizeBake(r *tui.Runner, name, alias string) error {
 		// Fall through to force-stop, but warn — image may have stale PATH.
 		r.Log("graceful shutdown didn't complete in 5 min; force-stopping (image may have stale Machine PATH)")
 		if err := runFG("incus", "stop", "--force", name); err != nil {
-			r.End("shutdown", err)
 			return err
 		}
 	}
-	r.End("shutdown", nil)
+	return nil
+}
 
-	r.Start("publish")
+// publishBake strips bake-time devices (install ISO, incusagent, raw.qemu CDs)
+// from the stopped VM and publishes it as an image under the given alias.
+func publishBake(r *tui.Runner, name, alias string) error {
 	r.Log("detaching bake-time devices (install, incusagent) and raw.qemu CDs")
 	for _, dev := range []string{"install", "incusagent"} {
 		_ = runFG("incus", "config", "device", "remove", name, dev)
@@ -711,9 +714,7 @@ func finalizeBake(r *tui.Runner, name, alias string) error {
 	_ = runFG("incus", "config", "unset", name, "raw.qemu")
 	_ = runFG("incus", "config", "unset", name, "raw.apparmor")
 	r.Log("incus publish %s --alias %s", name, alias)
-	err = runFG("incus", "publish", name, "--alias", alias)
-	r.End("publish", err)
-	return err
+	return runFG("incus", "publish", name, "--alias", alias)
 }
 
 // ---------- shell helpers ----------
