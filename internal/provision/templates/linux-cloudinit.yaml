@@ -15,6 +15,10 @@ packages:
   - build-essential
   - pkg-config
   - libssl-dev
+  # LLVM toolchain — clang frontend + lld linker, used by Rust, Zig, sanitizers
+  - llvm
+  - clang
+  - lld
 write_files:
   - path: /opt/krapow-bootstrap.sh
     permissions: '0755'

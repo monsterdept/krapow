@@ -34,6 +34,9 @@ sudo -u runner rm runner.tar.gz
 # releases. Cheaper than pinning packages in this script.
 sudo ./bin/installdependencies.sh
 
+# LLVM toolchain — parity with the Incus cloud-init Linux path.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y llvm clang lld
+
 sudo -u runner ./config.sh --unattended --replace \
     --url '{{.RepoURL}}' \
     --token "$RUNNER_TOKEN" \
