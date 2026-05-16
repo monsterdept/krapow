@@ -1,9 +1,11 @@
-<pre>
-<span style="color:#c678dd">  ,-.
-  /</span><span style="color:#98c379">|</span><span style="color:#c678dd">\
-  \</span><span style="color:#98c379">|</span><span style="color:#c678dd">/
-</span><span style="color:#98c379">   |</span>
-</pre>
+```
+   .'.     _  _  ___    _   ___  _____      __
+  /v|v\   | |/ /| _ \  /_\ | _ \/ _ \ \ /\ / /
+  \^|^/   | ' < |   / / _ \|  _/ (_) \ V  V / 
+   `|`    |_|\_\|_|_\/_/ \_\_|  \___/ \_/\_/  
+```
+
+The holy basil CLI.
 
 # Krapow - Easy GitHub Actions Runner VMs
 
