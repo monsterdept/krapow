@@ -145,7 +145,7 @@ const (
 var (
 	linuxImage    = envOr("KRAPOW_LINUX_IMAGE", "images:ubuntu/noble/cloud")
 	windowsImage  = envOr("KRAPOW_WIN_IMAGE", "local:win-runner-base")
-	macImage      = envOr("KRAPOW_MAC_IMAGE", "ghcr.io/cirruslabs/macos-sequoia-base:latest")
+	macImage      = envOr("KRAPOW_MAC_IMAGE", "ghcr.io/cirruslabs/macos-sequoia-xcode:latest")
 	linuxARMImage = envOr("KRAPOW_LINUX_ARM_IMAGE", "ghcr.io/cirruslabs/ubuntu-runner-arm64:24.04")
 )
 
