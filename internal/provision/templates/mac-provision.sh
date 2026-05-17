@@ -8,6 +8,11 @@ set -euo pipefail
 # SendEnv whitelist (cirruslabs sshd doesn't AcceptEnv these names).
 export RUNNER_TOKEN='{{.RegToken}}'
 
+# GitHub CLI — cirruslabs macos-sequoia-xcode ships Homebrew but not `gh`.
+# Release workflows shell out to `gh release create` etc. `brew install` is
+# idempotent (no-op if already present) so safe to run every provision.
+brew install gh
+
 # Pin runner version by fetching the latest tag from GitHub's API. Baking a
 # version into the image goes stale fast — GitHub enforces a rolling floor.
 VER=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \

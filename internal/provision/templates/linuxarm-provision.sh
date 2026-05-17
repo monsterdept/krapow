@@ -34,8 +34,9 @@ sudo -u runner rm runner.tar.gz
 # releases. Cheaper than pinning packages in this script.
 sudo ./bin/installdependencies.sh
 
-# LLVM toolchain — parity with the Incus cloud-init Linux path.
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y llvm clang lld
+# LLVM toolchain + GitHub CLI — parity with the Incus cloud-init Linux path.
+# `gh` is in noble's universe repo (already enabled on the cirruslabs base).
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y llvm clang lld gh
 
 sudo -u runner ./config.sh --unattended --replace \
     --url '{{.RepoURL}}' \

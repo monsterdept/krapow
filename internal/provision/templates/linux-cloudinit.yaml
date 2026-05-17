@@ -8,27 +8,107 @@ bootcmd:
   - resize2fs /dev/sda2 || true
 package_update: true
 # krapow base toolchain: aiming for parity with what GitHub-hosted
-# ubuntu-latest ships pre-installed. Language toolchains (rust/node/python/
-# etc.) are installed by workflows via actions/setup-*. Project-specific
+# ubuntu-latest ships pre-installed. The package list below is GitHub's
+# vital + common + cmd sets from actions/runner-images verbatim
+# (images/ubuntu/toolsets/toolset-2404.json) — the same set GitHub
+# installs into its ubuntu-24.04 runner image via install-apt-vital.sh
+# and install-apt-common.sh. Update by re-fetching that JSON when we
+# bump base image versions. Language toolchains (rust/node/python/etc.)
+# are installed by workflows via actions/setup-*; project-specific
 # system libs (libwebkit2gtk, etc.) are also up to the workflow.
 packages:
-  # runner-agent prerequisites (download + register)
+  # vital — GitHub's install-apt-vital.sh set
+  - bzip2
   - curl
+  - g++
+  - gcc
+  - make
   - jq
   - tar
-  - sudo
-  - ca-certificates
-  # archive utilities — workflows routinely unpack release zips
-  - zip
   - unzip
-  # universal C toolchain — every compiled language needs this to link
-  - build-essential
-  - pkg-config
+  - wget
+  # common — GitHub's apt.common_packages set
+  - autoconf
+  - automake
+  - dbus
+  - dnsutils
+  - dpkg
+  - dpkg-dev
+  - fakeroot
+  - fonts-noto-color-emoji
+  - gnupg2
+  - iproute2
+  - iputils-ping
+  - libyaml-dev
+  - libtool
   - libssl-dev
-  # LLVM toolchain — clang frontend + lld linker, used by Rust, Zig, sanitizers
+  - libsqlite3-dev
+  - locales
+  - mercurial
+  - openssh-client
+  - p7zip-rar
+  - pkg-config
+  - python-is-python3
+  - rpm
+  - texinfo
+  - tk
+  - tree
+  - tzdata
+  - upx
+  - xvfb
+  - xz-utils
+  - zsync
+  # cmd — GitHub's apt.cmd_packages set
+  - acl
+  - aria2
+  - binutils
+  - bison
+  - brotli
+  - libnss3-tools
+  - coreutils
+  - file
+  - findutils
+  - flex
+  - ftp
+  - haveged
+  - lz4
+  - m4
+  - mediainfo
+  - netcat
+  - net-tools
+  - p7zip-full
+  - parallel
+  - patchelf
+  - pigz
+  - pollinate
+  - rsync
+  - shellcheck
+  - sphinxsearch
+  - sqlite3
+  - ssh
+  - sshpass
+  - sudo
+  - systemd-coredump
+  - swig
+  - telnet
+  - time
+  - zip
+  # krapow-specific additions (not in GitHub's apt lists):
+  # - ca-certificates is a transitive dep of curl but make it explicit
+  # - build-essential bundles g++/gcc/make/libc6-dev/dpkg-dev — overlap
+  #   with the vital set but pulls libc6-dev which linkers need
+  # - LLVM metapackages installed via apt rather than GitHub's versioned
+  #   install-clang.sh path. We need llvm-ar as a workaround for the
+  #   binutils 2.42 (Ubuntu 24.04) ar bug on large .a files.
+  - ca-certificates
+  - build-essential
   - llvm
   - clang
   - lld
+  # GitHub CLI — release workflows shell out to `gh release create` etc.
+  # GitHub installs from cli.github.com; the universe package is a few
+  # minor versions behind but functionally equivalent for CI use.
+  - gh
 write_files:
   - path: /opt/krapow-bootstrap.sh
     permissions: '0755'
