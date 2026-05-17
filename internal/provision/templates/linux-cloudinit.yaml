@@ -109,6 +109,10 @@ packages:
   # GitHub installs from cli.github.com; the universe package is a few
   # minor versions behind but functionally equivalent for CI use.
   - gh
+  # git — GitHub installs from ppa:git-core/ppa via install-git.sh, which
+  # is why it's not in their apt.vital list. The noble main `git` package
+  # is current enough for actions/checkout and gh-based release flows.
+  - git
 write_files:
   - path: /opt/krapow-bootstrap.sh
     permissions: '0755'
