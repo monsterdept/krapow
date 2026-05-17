@@ -14,7 +14,7 @@ import (
 func stopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "stop <name>",
-		Short:             "Stop the VM and unregister the runner from GitHub",
+		Short:             "Stop the VM (leaves the runner registered; use `start` to bring it back)",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeRunnerNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,22 +63,29 @@ func doStopOrDestroy(name string, destroy bool) error {
 	if s == nil {
 		return fmt.Errorf("no krapow state for %q", name)
 	}
-	tok, _, err := auth.Token()
-	if err != nil {
-		return err
-	}
-	gh := githubapi.New(tok)
 
-	r, err := gh.FindRunner(s.Repo, name)
-	if err != nil {
-		return err
-	}
-	if r == nil {
-		fmt.Printf("==> runner %s not found on GitHub (already removed)\n", name)
-	} else {
-		fmt.Printf("==> deleting runner %s (id=%d) from GitHub\n", name, r.ID)
-		if err := gh.DeleteRunner(s.Repo, r.ID); err != nil {
+	// Only `destroy` unregisters from GitHub. `stop` leaves the registration
+	// intact so the runner agent's stored credentials stay valid — `start`
+	// can then just boot the VM and the agent reconnects on its own. The
+	// runner shows as 'offline' in GitHub's UI while stopped; informational
+	// only, doesn't affect anything.
+	if destroy {
+		tok, _, err := auth.Token()
+		if err != nil {
 			return err
+		}
+		gh := githubapi.New(tok)
+		r, err := gh.FindRunner(s.Repo, name)
+		if err != nil {
+			return err
+		}
+		if r == nil {
+			fmt.Printf("==> runner %s not found on GitHub (already removed)\n", name)
+		} else {
+			fmt.Printf("==> deleting runner %s (id=%d) from GitHub\n", name, r.ID)
+			if err := gh.DeleteRunner(s.Repo, r.ID); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -91,8 +98,7 @@ func doStopOrDestroy(name string, destroy bool) error {
 			return state.Remove(name)
 		}
 		fmt.Printf("==> stopping tart VM %s\n", name)
-		_ = tart.Stop(name, 30)
-		return nil
+		return tart.Stop(name, 30)
 	}
 
 	if destroy {
@@ -101,6 +107,5 @@ func doStopOrDestroy(name string, destroy bool) error {
 		return state.Remove(name)
 	}
 	fmt.Printf("==> stopping VM %s\n", name)
-	_ = incus.Stop(name)
-	return nil
+	return incus.Stop(name)
 }
