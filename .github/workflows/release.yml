@@ -1,0 +1,33 @@
+# Releases krapow on tag push (v*). goreleaser builds the linux/darwin ×
+# amd64/arm64 matrix, publishes archives + checksums to the GitHub release,
+# and (when HOMEBREW_TAP_TOKEN is set) updates rossturk/homebrew-krapow.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # needed so GITHUB_TOKEN can create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # goreleaser needs full history for the changelog
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with repo scope on rossturk/homebrew-krapow. Without it, the
+          # brews step fails but the release archives still publish.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

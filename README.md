@@ -44,6 +44,26 @@ Classic PATs need the `repo` scope. Fine-grained PATs need **Administration: rea
 
 ## Install
 
+### Homebrew (macOS, Linux)
+
+```sh
+brew install rossturk/krapow/krapow
+```
+
+On macOS this also pulls in `tart` automatically. Linux users still need to install `incus` via apt — `krapow doctor` will tell you what's missing.
+
+### curl | bash
+
+Downloads the latest release tarball for your OS/arch and drops the binary in `~/.local/bin/krapow`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rossturk/krapow/main/install.sh | bash
+```
+
+Override the install location with `KRAPOW_INSTALL_DIR=/usr/local/bin` (the script will use `install -m 0755`, so write permission is on you).
+
+### From source
+
 ```sh
 # build into ./krapow
 just build
@@ -70,10 +90,11 @@ Each `init` boots a VM, installs the GitHub Actions runner, registers it against
 When you're done:
 
 ```sh
-krapow status                 # list managed runners + their VM/GitHub state
-krapow shell linux-runner-ab12cd   # open an interactive shell on a runner
-krapow stop    linux-runner-ab12cd # power off + deregister
-krapow destroy linux-runner-ab12cd # delete VM + state + GitHub registration
+krapow status                       # list managed runners + their VM/GitHub state
+krapow shell   linux-runner-ab12cd  # open an interactive shell on a runner
+krapow stop    linux-runner-ab12cd  # power off the VM (registration intact)
+krapow start   linux-runner-ab12cd  # boot it back up; agent reconnects on its own
+krapow destroy linux-runner-ab12cd  # delete VM + state + GitHub registration
 ```
 
 ## Commands
@@ -84,7 +105,8 @@ krapow destroy linux-runner-ab12cd # delete VM + state + GitHub registration
 | `krapow bake` | Build/rebuild the Windows base image (used implicitly by `init win`) |
 | `krapow status` | List krapow-managed runners with VM + GitHub state |
 | `krapow shell <name>` | Open an interactive shell on a runner (`-- cmd args` for one-shot) |
-| `krapow stop <name>` | Stop the VM and deregister the runner |
+| `krapow stop <name>` | Stop the VM (runner stays registered; shows "Offline" in GitHub) |
+| `krapow start <name>` | Boot a stopped runner; the agent reconnects automatically |
 | `krapow destroy <name>` | Delete the VM and unregister the runner |
 | `krapow doctor` | Diagnose host readiness (CLIs, group membership, token scope) |
 

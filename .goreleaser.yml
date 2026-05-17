@@ -1,0 +1,70 @@
+# goreleaser config — runs on tag push via .github/workflows/release.yml.
+# Local dry-run: `goreleaser release --snapshot --clean --skip=publish`.
+version: 2
+
+project_name: krapow
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: krapow
+    main: .
+    binary: krapow
+    # Pure Go (no cgo) so cross-compile is trivial. Strip symbols + paths to
+    # keep binaries small and reproducible.
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    files:
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+      - "^Merge"
+
+# Homebrew formula auto-published to rossturk/homebrew-krapow on every tag.
+# Requires HOMEBREW_TAP_TOKEN secret — a PAT with `repo` scope on that tap
+# repo. (GITHUB_TOKEN can't push cross-repo.)
+brews:
+  - name: krapow
+    repository:
+      owner: rossturk
+      name: homebrew-krapow
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/rossturk/krapow"
+    description: "Run GitHub Actions self-hosted runners as Incus or Tart VMs"
+    install: |
+      bin.install "krapow"
+    test: |
+      system "#{bin}/krapow", "doctor"
+    # Tart is only meaningful on macOS hosts; Linux users get Incus separately
+    # (apt) since it's not in Homebrew.
+    dependencies:
+      - name: cirruslabs/cli/tart
+        os: mac
