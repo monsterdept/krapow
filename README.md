@@ -47,8 +47,11 @@ Classic PATs need the `repo` scope. Fine-grained PATs need **Administration: rea
 ### Homebrew (macOS, Linux)
 
 ```sh
-brew install rossturk/krapow/krapow
+brew tap rossturk/krapow
+brew install krapow
 ```
+
+After the one-time tap, `brew upgrade krapow` and `brew uninstall krapow` work as expected. If you'd rather skip the tap step, the equivalent one-liner is `brew install rossturk/krapow/krapow`.
 
 On macOS this also pulls in `tart` automatically. Linux users still need to install `incus` via apt — `krapow doctor` will tell you what's missing.
 
