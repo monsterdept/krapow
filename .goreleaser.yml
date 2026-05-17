@@ -33,6 +33,7 @@ archives:
     formats: [tar.gz]
     files:
       - README.md
+      - LICENSE
 
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
@@ -59,6 +60,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/rossturk/krapow"
     description: "Run GitHub Actions self-hosted runners as Incus or Tart VMs"
+    license: "Apache-2.0"
     install: |
       bin.install "krapow"
     test: |
