@@ -54,7 +54,7 @@ packages:
   - tk
   - tree
   - tzdata
-  - upx
+  - upx-ucl  # noble removed the `upx` virtual package; upx-ucl is the binary
   - xvfb
   - xz-utils
   - zsync
@@ -74,7 +74,7 @@ packages:
   - lz4
   - m4
   - mediainfo
-  - netcat
+  - netcat-openbsd  # noble dropped the `netcat` metapackage
   - net-tools
   - p7zip-full
   - parallel
