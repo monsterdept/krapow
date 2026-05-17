@@ -55,6 +55,7 @@ func New(title string, phases []PhaseSpec, plain bool) *Runner {
 		phases: phases,
 		plain:  plain || !isTerminal(),
 		starts: map[string]time.Time{},
+		done:   make(chan struct{}),
 	}
 	if r.plain {
 		return r
@@ -75,21 +76,26 @@ func New(title string, phases []PhaseSpec, plain bool) *Runner {
 }
 
 type Runner struct {
-	title  string
-	phases []PhaseSpec
-	plain  bool
-	prog   *tea.Program
-	model  model
-	starts map[string]time.Time
-	mu     sync.Mutex
+	title    string
+	phases   []PhaseSpec
+	plain    bool
+	prog     *tea.Program
+	model    model
+	starts   map[string]time.Time
+	mu       sync.Mutex
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 // Run blocks until Finish() has been called. Returns the final error (if any).
-//
-// Plain mode is non-blocking — Run returns immediately and phase events print
-// inline as they happen.
+// Same contract in plain mode — plain mode uses a done channel instead of a
+// bubbletea event loop, so the caller's "spawn work in a goroutine, block on
+// Run, then read the err" pattern works identically with or without a TTY.
+// Without this, agent/script callers race past VM creation and exit before
+// the work goroutine writes state.
 func (r *Runner) Run() error {
 	if r.plain {
+		<-r.done
 		return nil
 	}
 	_, err := r.prog.Run()
@@ -165,12 +171,14 @@ func (r *Runner) SetDetail(phaseID, detail string) {
 	r.prog.Send(detailMsg{id: phaseID, detail: detail})
 }
 
-// Finish concludes the run and tears down the TUI.
+// Finish concludes the run and tears down the TUI. Safe to call more than
+// once — only the first call unblocks Run.
 func (r *Runner) Finish(err error) {
 	if r.plain {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "krapow: %v\n", err)
 		}
+		r.doneOnce.Do(func() { close(r.done) })
 		return
 	}
 	r.prog.Send(doneMsg{err: err})
