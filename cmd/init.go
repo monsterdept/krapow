@@ -60,8 +60,9 @@ func initLinuxCmd() *cobra.Command {
 		defaultLabels = "self-hosted,linux,arm64,krapow"
 	}
 	c := &cobra.Command{
-		Use:   "linux",
-		Short: "Launch a Linux runner (Ubuntu via Incus on Linux hosts; Ubuntu ARM via Tart on macOS hosts)",
+		Use:     "linux",
+		Aliases: []string{"lin"},
+		Short:   "Launch a Linux runner (Ubuntu via Incus on Linux hosts; Ubuntu ARM via Tart on macOS hosts)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runInit(linuxKind, name, labels, repo, org, plain)
 		},
@@ -77,8 +78,9 @@ func initMacCmd() *cobra.Command {
 	var name, labels, repo, org string
 	var plain bool
 	c := &cobra.Command{
-		Use:   "mac",
-		Short: "Launch a macOS Tart VM as a runner (macOS hosts only)",
+		Use:     "mac",
+		Aliases: []string{"macos"},
+		Short:   "Launch a macOS Tart VM as a runner (macOS hosts only)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if runtime.GOOS != "darwin" {
 				return fmt.Errorf("`krapow init mac` requires a macOS host (Tart wraps Apple's Virtualization.framework); current GOOS=%s", runtime.GOOS)
@@ -97,8 +99,9 @@ func initWinCmd() *cobra.Command {
 	var name, labels, repo, org string
 	var yesBuild, plain bool
 	c := &cobra.Command{
-		Use:   "win",
-		Short: "Launch a Windows Incus VM as a runner (auto-bakes base image on first run)",
+		Use:     "win",
+		Aliases: []string{"windows"},
+		Short:   "Launch a Windows Incus VM as a runner (auto-bakes base image on first run)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runInitWin(name, labels, repo, org, yesBuild, plain)
 		},
