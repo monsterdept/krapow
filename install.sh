@@ -3,10 +3,10 @@
 # OS/arch and drops the binary in ~/.local/bin (override via KRAPOW_INSTALL_DIR).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/rossturk/krapow/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/widdlab/krapow/main/install.sh | bash
 set -euo pipefail
 
-REPO="rossturk/krapow"
+REPO="widdlab/krapow"
 BIN="krapow"
 INSTALL_DIR="${KRAPOW_INSTALL_DIR:-$HOME/.local/bin}"
 
