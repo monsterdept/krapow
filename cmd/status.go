@@ -6,12 +6,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/widdlab/krapow/internal/auth"
 	"github.com/widdlab/krapow/internal/githubapi"
 	"github.com/widdlab/krapow/internal/incus"
 	"github.com/widdlab/krapow/internal/state"
 	"github.com/widdlab/krapow/internal/tart"
-	"github.com/spf13/cobra"
 )
 
 // installWindow is how long after a runner is created we assume a

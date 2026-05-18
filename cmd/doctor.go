@@ -8,11 +8,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/widdlab/krapow/internal/auth"
 	"github.com/widdlab/krapow/internal/githubapi"
 	"github.com/widdlab/krapow/internal/imagebuild"
 	"github.com/widdlab/krapow/internal/state"
-	"github.com/spf13/cobra"
 )
 
 func doctorCmd() *cobra.Command {

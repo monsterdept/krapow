@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/widdlab/krapow/internal/auth"
 	"github.com/widdlab/krapow/internal/githubapi"
 	"github.com/widdlab/krapow/internal/imagebuild"
@@ -23,7 +24,6 @@ import (
 	"github.com/widdlab/krapow/internal/tart"
 	"github.com/widdlab/krapow/internal/tui"
 	"github.com/widdlab/krapow/internal/winssh"
-	"github.com/spf13/cobra"
 )
 
 // randomSuffix returns a 6-char [a-z0-9] string for runner names.
