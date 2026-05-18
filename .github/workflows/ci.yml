@@ -1,0 +1,66 @@
+# Continuous integration on krapow's own self-hosted runners. The point is
+# dogfooding — these runners are managed by `krapow init` and registered
+# with widdlab/krapow under the labels below, so every PR exercises them
+# under low-stakes load. release.yml stays on GitHub-hosted runners as the
+# safety net: a broken self-hosted runner can't prevent a release.
+#
+# Forks: PRs from forks won't run automatically — outside-collaborator
+# approval is on for this repo. Otherwise unreviewed fork code would land
+# on our infrastructure. Don't change that without thinking through the
+# implications.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-flight runs on the same ref when a new push lands. Stops job
+# pile-ups while iterating on a PR and frees up the runners for the
+# latest commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Match the default labels set by `krapow init linux` / `init mac`.
+          # The trailing `krapow` label is the canary — it's the one we own,
+          # so it can't be matched by an unrelated self-hosted fleet.
+          - platform: linux
+            labels: [self-hosted, linux, krapow]
+          - platform: macos
+            labels: [self-hosted, macOS, krapow]
+    runs-on: ${{ matrix.labels }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin to Go's stable channel rather than baking a specific version
+      # into the runner image — keeps the runner generic and the version
+      # bump a one-line change here.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: gofmt
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./...
