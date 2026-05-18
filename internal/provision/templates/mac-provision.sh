@@ -8,6 +8,12 @@ set -euo pipefail
 # SendEnv whitelist (cirruslabs sshd doesn't AcceptEnv these names).
 export RUNNER_TOKEN='{{.RegToken}}'
 
+# Homebrew on Apple Silicon installs to /opt/homebrew, which is only on PATH
+# in interactive shells (set up via the user's shell rc). We're running via
+# `ssh ... bash -s`, which is non-interactive — brew won't be on PATH unless
+# we add it ourselves.
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
 # GitHub CLI — cirruslabs macos-sequoia-xcode ships Homebrew but not `gh`.
 # Release workflows shell out to `gh release create` etc. `brew install` is
 # idempotent (no-op if already present) so safe to run every provision.
