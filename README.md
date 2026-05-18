@@ -4,16 +4,11 @@
 
 # Krapow: Easy GitHub Actions Runners
 
-<a href="https://github.com/rossturk/krapow" target="_blank"><img src="https://img.shields.io/github/go-mod/go-version/rossturk/krapow?style=for-the-badge&logo=go" alt="Krapow Go Version" /></a>
-<a href="https://goreportcard.com/report/github.com/rossturk/krapow" target="_blank"><img src="https://goreportcard.com/badge/github.com/rossturk/krapow?style=for-the-badge&logo=go" alt="Krapow Go Report Card" /></a>
-<a href="https://github.com/rossturk/krapow" target="_blank"><img src="https://img.shields.io/github/license/rossturk/krapow?style=for-the-badge" alt="Krapow Licence" /></a>
-
-```
-   .'.     _  _  ___    _   ___  _____      __
-  /v|v\   | |/ /| _ \  /_\ | _ \/ _ \ \ /\ / /
-  \^|^/   | ' < |   / / _ \|  _/ (_) \ V  V / 
-   `|`    |_|\_\|_|_\/_/ \_\_|  \___/ \_/\_/  
-```
+<p align="center">
+  <a href="https://github.com/rossturk/krapow" target="_blank"><img src="https://img.shields.io/github/go-mod/go-version/rossturk/krapow?style=for-the-badge&logo=go" alt="Krapow Go Version" /></a>
+  <a href="https://goreportcard.com/report/github.com/rossturk/krapow" target="_blank"><img src="https://goreportcard.com/badge/github.com/rossturk/krapow?style=for-the-badge&logo=go" alt="Krapow Go Report Card" /></a>
+  <a href="https://github.com/rossturk/krapow" target="_blank"><img src="https://img.shields.io/github/license/rossturk/krapow?style=for-the-badge" alt="Krapow Licence" /></a>
+</p>
 
 Krapow is a tool for managing GitHub Actions self-hosted runners on *macOS* and *Linux*. A single-command builds a Linux, Mac, or Windows VM and registers it as a runner against your repo.
 
