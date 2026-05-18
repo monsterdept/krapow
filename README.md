@@ -7,21 +7,14 @@
    `|`    |_|\_\|_|_\/_/ \_\_|  \___/ \_/\_/  
 ```
 
-GitHub Actions self-hosted runners in VMs — Linux and Windows via [Incus](https://linuxcontainers.org/incus/), macOS and Linux ARM via [Tart](https://tart.run/). Single-command builds a VM and registers it as a runner against your repo.
+Krapow is a tool for managing GitHub Actions self-hosted runners on *macOS* and *Linux*. A single-command builds a Linux, Mac, or Windows VM and registers it as a runner against your repo.
 
-```sh
-krapow init linux --repo mystuff/myrepo
-krapow init win --repo mystuff/myrepo
-krapow init mac --repo mystuff/myrepo
-```
 
 ## Why
 
-GitHub's runners cost money. Their free tier is just enough to get you up and running, and then you quickly hit quota. If you're not working on a revenue-generating project, you might not want to pay for them.
+GitHub's runners cost money. The free tier is almost enough to give you satisfaction, but then you quickly hit quota just before your first successful run. They work great, but if you're not working on a revenue-generating project you might not want to pay for them.
 
 Self-hosted runners are a hassle. Yeah, the setup process is just a script; they're made to be easy to spin up. But do you have spare machines laying around? Do you know how to keep them from falling asleep? It's not hard, and a lot of us have solved these problems, but it's still painful every time we have to go in and muck with them.
-
-Krapow lets you manage runners with simple init/destroy commands that run on the Linux box in your closet or the Mac on your lap. If you run it across both of those footprints, you can build for most major targets.
 
 I had previously used amazing tools like [mac-runner](https://github.com/omniaura/mac-runner) and deployed [runner-images](https://github.com/actions/runner-images) in Docker, but neither of these solutions handled Windows well and they behaved differently across platforms.
 
@@ -37,11 +30,9 @@ brew tap rossturk/krapow     # provides the krapow formula
 brew install krapow
 ```
 
-Two taps because Homebrew won't auto-add a tap declared as a dependency — you have to opt in to cirruslabs/cli explicitly. After this, `brew upgrade krapow` and `brew uninstall krapow` work as expected.
+Linux hosts use Incus, which isn't in Homebrew — install it from your distro (`apt install incus` on Ubuntu/Debian). After installing, `krapow doctor` will tell you exactly what's missing.
 
-Linux hosts use Incus, which isn't in Homebrew — install it from your distro (`apt install incus` on Ubuntu/Debian). `krapow doctor` will tell you exactly what's missing.
-
-### curl | bash
+### Install script
 
 Downloads the latest release tarball for your OS/arch and drops the binary in `~/.local/bin/krapow`:
 
@@ -49,7 +40,7 @@ Downloads the latest release tarball for your OS/arch and drops the binary in `~
 curl -fsSL https://raw.githubusercontent.com/rossturk/krapow/main/install.sh | bash
 ```
 
-Override the install location with `KRAPOW_INSTALL_DIR=/usr/local/bin` (the script will use `install -m 0755`, so write permission is on you).
+Override the install location with `KRAPOW_INSTALL_DIR=/usr/local/bin` (write permission is required).
 
 ## GitHub token
 
