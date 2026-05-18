@@ -123,7 +123,7 @@ State lives under `~/.krapow/state/` — one JSON file per runner. The Windows b
 
 ## How it works
 
-`krapow init` runs a sequence of named phases — image pull, VM launch, provisioning, runner install, GitHub registration — surfaced live in a TUI (or as plain text under `--plain` / when stdout isn't a terminal). The Windows path additionally goes through a `bake` step that downloads the Windows Server 2022 eval ISO, runs an unattended install, applies virtio drivers, runs sysprep, and publishes the result as a reusable Incus image. See [`docs/flows.html`](docs/flows.html) for the full state-flow diagram.
+`krapow init` runs a sequence of named phases — image pull, VM launch, provisioning, runner install, GitHub registration — surfaced live in a TUI (or as plain text under `--plain` / when stdout isn't a terminal). The Windows path additionally goes through a `bake` step that downloads the Windows Server 2022 eval ISO, runs an unattended install, applies virtio drivers, runs sysprep, and publishes the result as a reusable Incus image. See [`docs/flows.md`](docs/flows.md) for the full state-flow diagram.
 
 ## System requirements
 
