@@ -67,7 +67,7 @@ func New(title string, phases []PhaseSpec, plain bool) *Runner {
 		title:   title,
 		spinner: s,
 		startAt: time.Now(),
-		basil:   loadBasil(),
+		basil:   basilArt,
 	}
 	for _, p := range phases {
 		r.model.phases = append(r.model.phases, phaseState{spec: p, status: statusPending})
@@ -314,9 +314,7 @@ func (m *model) View() string {
 
 	body := strings.Join(phaseCells, "   ")
 	box := boxStyle.Render(headerStyle.Render(header) + "\n" + body)
-	if m.basil != "" {
-		box = lipgloss.JoinHorizontal(lipgloss.Top, m.basil, " ", box)
-	}
+	box = lipgloss.JoinHorizontal(lipgloss.Top, m.basil, " ", box)
 
 	var out strings.Builder
 	out.WriteString("\n")
@@ -366,31 +364,14 @@ func isTerminal() bool {
 	return isatty.IsTerminal(os.Stdout.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
 }
 
-// loadBasil reads /tmp/basil.txt and returns it as the left-edge decoration
-// for the header box. Best-effort: any error (file missing, unreadable)
-// returns "" and the TUI renders without it.
-//
-// The file is expected to be pre-coloured with 256-colour ANSI escapes. We
-// strip a trailing reset-only line (so the basil's height matches the art,
-// not the file's bookkeeping) and append \x1b[0m to every remaining line so
-// the colour can't bleed into the box border rendered to its right.
-func loadBasil() string {
-	b, err := os.ReadFile("/tmp/basil.txt")
-	if err != nil {
-		return ""
-	}
-	s := strings.TrimRight(string(b), "\n")
-	s = strings.TrimSuffix(s, "\x1b[0m")
-	s = strings.TrimRight(s, "\n")
-	if s == "" {
-		return ""
-	}
-	lines := strings.Split(s, "\n")
-	for i := range lines {
-		lines[i] = lines[i] + "\x1b[0m"
-	}
-	return strings.Join(lines, "\n")
-}
+// basilArt is the 4-line holy-basil decoration painted to the left of the
+// header box. 256-colour ANSI: green leaves (38;5;34), brown stem (38;5;100),
+// with an explicit reset on every line so the colour can't bleed into the
+// box border rendered to its right.
+const basilArt = "\x1b[38;5;34m   .'.\x1b[0m\n" +
+	"\x1b[38;5;34m  /v\x1b[38;5;100m|\x1b[38;5;34mv\\\x1b[0m\n" +
+	"\x1b[38;5;34m  \\^\x1b[38;5;100m|\x1b[38;5;34m^/\x1b[0m\n" +
+	"\x1b[38;5;100m   `|`\x1b[0m"
 
 // lineWriter buffers Writes until it sees a line terminator (\n or \r), then
 // sends each line as a logMsg to the program. Treats \r as a line boundary so
