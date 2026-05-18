@@ -16,7 +16,9 @@ Self-hosted runners are a pain to set up and keep running. Yeah, it's just a set
 
 Krapow lets you manage runners with simple init/destroy commands that run on the Linux box in your closet or the Mac on your lap. If you run it across both of those footprints, you can build for most major targets.
 
-One set of commands keeps it all running.
+I had previously used amazing tools like MacRunner and the runner-images via Docker, but neither of them handled Windows well and they behaved differently across platforms.
+
+With Krapow, one tool works the same everywhere + for every kind of runner.
 
 ## Install
 
