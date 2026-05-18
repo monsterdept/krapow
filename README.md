@@ -12,13 +12,13 @@ krapow init mac --repo mystuff/myrepo
 
 GitHub's runners cost money. Their free tier is just enough to get you up and running, and then you quickly hit quota. If you're not working on a revenue-generating project, you might not want to pay for them.
 
-Self-hosted runners are a pain to set up and keep running. Yeah, it's just a setup script. But do you have spare machines laying around? Do you know how to keep it from falling asleep? It's not hard, but it's hard enough to be a pain.
+Self-hosted runners are a hassle. Yeah, the setup process is just a script; they're made to be easy to spin up. But do you have spare machines laying around? Do you know how to keep them from falling asleep? It's not hard, and a lot of us have solved these problems, but it's still painful every time we have to go in and muck with them.
 
 Krapow lets you manage runners with simple init/destroy commands that run on the Linux box in your closet or the Mac on your lap. If you run it across both of those footprints, you can build for most major targets.
 
-I had previously used amazing tools like MacRunner and the runner-images via Docker, but neither of them handled Windows well and they behaved differently across platforms.
+I had previously used amazing tools like [mac-runner](https://github.com/omniaura/mac-runner) and deployed [runner-images](https://github.com/actions/runner-images) in Docker, but neither of these solutions handled Windows well and they behaved differently across platforms.
 
-With Krapow, one tool works the same everywhere + for every kind of runner.
+With Krapow, one tool works the same on every platform  + every kind of runner.
 
 ## Install
 
