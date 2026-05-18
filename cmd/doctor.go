@@ -3,10 +3,13 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/widdlab/krapow/internal/auth"
@@ -28,6 +31,7 @@ func doctorCmd() *cobra.Command {
 				checks = append(checks,
 					checkTartReachable,
 					checkSshpassReachable,
+					checkTartCacheHealth,
 				)
 			} else {
 				checks = append(checks,
@@ -37,6 +41,11 @@ func doctorCmd() *cobra.Command {
 					checkWindowsBuildDeps,
 				)
 			}
+			// Cross-platform: free-disk warning. macOS hosts pull ~30 GB tart
+			// images + ~80 GB clones; Linux hosts launch 75 GiB Incus VMs.
+			// Either way, running tight is the single most common reason an
+			// init fails midway and leaves cache state half-written.
+			checks = append(checks, checkHostDiskSpace)
 			anyFail := false
 			for _, c := range checks {
 				r := c()
@@ -95,6 +104,96 @@ func checkTartReachable() checkResult {
 		}
 	}
 	return checkResult{status: statusOK, name: "tart usable"}
+}
+
+// checkHostDiskSpace warns when the user's home volume has less free space
+// than a typical init needs end-to-end. The thresholds aren't exact — they're
+// "you'll be sad if you start an init now" guards, not hard requirements.
+//
+// macOS: image (~30 GB) + clone (~80 GB) + Virtualization.framework scratch.
+// 50 GiB is the floor where things stop getting weird on the cirruslabs
+// macos-sequoia-xcode image; lower than that and we've seen partial pulls
+// leave ~/.tart in a half-broken state that VZ then refuses to personalize.
+//
+// Linux: 75 GiB Incus base disk + a few GB of scratch.
+func checkHostDiskSpace() checkResult {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return checkResult{status: statusWarn, name: "host disk space", detail: err.Error()}
+	}
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(home, &st); err != nil {
+		return checkResult{status: statusWarn, name: "host disk space", detail: err.Error()}
+	}
+	// Bavail is "blocks available to non-root user" — matches what `df` reports
+	// and what tart actually has to work with.
+	free := uint64(st.Bavail) * uint64(st.Bsize)
+	freeGiB := free >> 30
+	threshold := uint64(50)
+	if runtime.GOOS != "darwin" {
+		threshold = 80 // Incus base disk alone is 75 GiB
+	}
+	if freeGiB < threshold {
+		return checkResult{
+			status: statusWarn,
+			name:   "host disk space",
+			detail: fmt.Sprintf("%d GiB free under %s — recommend ≥ %d GiB before next init", freeGiB, home, threshold),
+			fix:    "free up space; see `du -sh ~/Library/Caches/* ~/.tart` etc.",
+		}
+	}
+	return checkResult{status: statusOK, name: "host disk space", detail: fmt.Sprintf("%d GiB free", freeGiB)}
+}
+
+// checkTartCacheHealth catches the "ghost tree" state — the OCI cache
+// directory exists, has subdirs for the image references, but the actual
+// layer files are missing or near-zero bytes. That's the signature of an
+// interrupted/disk-full pull. tart then claims the image is present but
+// VZ rejects the resulting VM with `VZErrorDomain Code=-9` on `tart run`.
+//
+// Recovery is `rm -rf ~/.tart && retry init`. There's no in-place repair
+// because tart's manifest parsing won't notice the empty layers.
+func checkTartCacheHealth() checkResult {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return checkResult{status: statusOK, name: "tart cache health"}
+	}
+	cacheDir := filepath.Join(home, ".tart", "cache", "OCIs")
+	info, err := os.Stat(cacheDir)
+	if err != nil || !info.IsDir() {
+		return checkResult{status: statusOK, name: "tart cache health", detail: "no OCI cache yet"}
+	}
+
+	// Walk the cache, tracking whether we see subdirs at all and the total
+	// bytes of cached layer data. A healthy cache after even one pull is at
+	// least hundreds of MB; <100 MB across the whole tree means the dirs are
+	// just placeholders.
+	var hasSubdirs bool
+	var totalBytes int64
+	_ = filepath.WalkDir(cacheDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if path != cacheDir {
+				hasSubdirs = true
+			}
+			return nil
+		}
+		if fi, ierr := d.Info(); ierr == nil {
+			totalBytes += fi.Size()
+		}
+		return nil
+	})
+
+	if hasSubdirs && totalBytes < (100<<20) {
+		return checkResult{
+			status: statusWarn,
+			name:   "tart cache health",
+			detail: fmt.Sprintf("OCI cache has directories but only %.1f MB of data — signature of a failed pull", float64(totalBytes)/(1<<20)),
+			fix:    "rm -rf ~/.tart  (forces a clean re-pull on next `krapow init`)",
+		}
+	}
+	return checkResult{status: statusOK, name: "tart cache health"}
 }
 
 func checkSshpassReachable() checkResult {
