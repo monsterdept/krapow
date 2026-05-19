@@ -3,12 +3,12 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/monsterdept/krapow/internal/auth"
+	"github.com/monsterdept/krapow/internal/githubapi"
+	"github.com/monsterdept/krapow/internal/incus"
+	"github.com/monsterdept/krapow/internal/state"
+	"github.com/monsterdept/krapow/internal/tart"
 	"github.com/spf13/cobra"
-	"github.com/widdlab/krapow/internal/auth"
-	"github.com/widdlab/krapow/internal/githubapi"
-	"github.com/widdlab/krapow/internal/incus"
-	"github.com/widdlab/krapow/internal/state"
-	"github.com/widdlab/krapow/internal/tart"
 )
 
 func stopCmd() *cobra.Command {

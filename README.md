@@ -4,9 +4,9 @@
 
 
 <p align="center">
-  <a href="https://github.com/widdlab/krapow" target="_blank"><img src="https://img.shields.io/github/go-mod/go-version/widdlab/krapow?style=for-the-badge&logo=go" alt="Krapow Go Version" /></a>
-  <a href="https://goreportcard.com/report/github.com/widdlab/krapow" target="_blank"><img src="https://goreportcard.com/badge/github.com/widdlab/krapow?style=for-the-badge&logo=go" alt="Krapow Go Report Card" /></a>
-  <a href="https://github.com/widdlab/krapow" target="_blank"><img src="https://img.shields.io/github/license/widdlab/krapow?style=for-the-badge" alt="Krapow Licence" /></a>
+  <a href="https://github.com/monsterdept/krapow" target="_blank"><img src="https://img.shields.io/github/go-mod/go-version/monsterdept/krapow?style=for-the-badge&logo=go" alt="Krapow Go Version" /></a>
+  <a href="https://goreportcard.com/report/github.com/monsterdept/krapow" target="_blank"><img src="https://goreportcard.com/badge/github.com/monsterdept/krapow?style=for-the-badge&logo=go" alt="Krapow Go Report Card" /></a>
+  <a href="https://github.com/monsterdept/krapow" target="_blank"><img src="https://img.shields.io/github/license/monsterdept/krapow?style=for-the-badge" alt="Krapow Licence" /></a>
 </p>
 
 # Krapow: Easy GitHub Actions Runners
@@ -30,7 +30,7 @@ With Krapow, one tool works the same on every platform  + every kind of runner.
 
 ```sh
 brew tap cirruslabs/cli      # provides tart (krapow's macOS VM backend)
-brew tap widdlab/tap         # widdlab's catch-all tap; provides the krapow formula
+brew tap monsterdept/tap         # monsterdept's catch-all tap; provides the krapow formula
 brew install krapow
 ```
 
@@ -41,7 +41,7 @@ Linux hosts use Incus, which isn't in Homebrew — install it from your distro (
 Downloads the latest release tarball for your OS/arch and drops the binary in `~/.local/bin/krapow`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/widdlab/krapow/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/monsterdept/krapow/main/install.sh | bash
 ```
 
 Override the install location with `KRAPOW_INSTALL_DIR=/usr/local/bin` (write permission is required).

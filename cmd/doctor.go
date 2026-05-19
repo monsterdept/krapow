@@ -11,11 +11,11 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/monsterdept/krapow/internal/auth"
+	"github.com/monsterdept/krapow/internal/githubapi"
+	"github.com/monsterdept/krapow/internal/imagebuild"
+	"github.com/monsterdept/krapow/internal/state"
 	"github.com/spf13/cobra"
-	"github.com/widdlab/krapow/internal/auth"
-	"github.com/widdlab/krapow/internal/githubapi"
-	"github.com/widdlab/krapow/internal/imagebuild"
-	"github.com/widdlab/krapow/internal/state"
 )
 
 func doctorCmd() *cobra.Command {

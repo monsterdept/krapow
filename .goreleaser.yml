@@ -55,23 +55,23 @@ changelog:
       - "^test:"
       - "^Merge"
 
-# Homebrew formula auto-published to widdlab/homebrew-tap on every tag.
-# That tap is the catch-all for all widdlab tools (cirruslabs/homebrew-cli
-# does the same thing) — one `brew tap widdlab/tap` covers every project.
+# Homebrew formula auto-published to monsterdept/homebrew-tap on every tag.
+# That tap is the catch-all for all monsterdept tools (cirruslabs/homebrew-cli
+# does the same thing) — one `brew tap monsterdept/tap` covers every project.
 # Requires HOMEBREW_TAP_TOKEN secret — a PAT with `repo` scope on that tap
 # repo. (GITHUB_TOKEN can't push cross-repo.)
 brews:
   - name: krapow
     repository:
-      owner: widdlab
+      owner: monsterdept
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     # Place the formula under Formula/ so the tap can host multiple tools
     # cleanly. Brew accepts root-level too, but Formula/ scales as we add
-    # more widdlab projects to the same tap.
+    # more monsterdept projects to the same tap.
     directory: Formula
-    homepage: "https://github.com/widdlab/krapow"
+    homepage: "https://github.com/monsterdept/krapow"
     description: "Run GitHub Actions self-hosted runners as Incus or Tart VMs"
     license: "Apache-2.0"
     install: |

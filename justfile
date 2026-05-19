@@ -123,4 +123,4 @@ release version:
     git tag -a "$tag" -m "$body"
     git push origin "$tag"
 
-    echo "==> pushed. release workflow: https://github.com/widdlab/krapow/actions/workflows/release.yml"
+    echo "==> pushed. release workflow: https://github.com/monsterdept/krapow/actions/workflows/release.yml"

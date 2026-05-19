@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"github.com/monsterdept/krapow/internal/imagebuild"
 	"github.com/spf13/cobra"
-	"github.com/widdlab/krapow/internal/imagebuild"
 )
 
 // bakeCmd rebuilds the Windows base image without registering a runner. The

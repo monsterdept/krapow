@@ -6,10 +6,10 @@ import (
 	"regexp"
 	"runtime"
 
+	"github.com/monsterdept/krapow/internal/incus"
+	"github.com/monsterdept/krapow/internal/state"
+	"github.com/monsterdept/krapow/internal/tart"
 	"github.com/spf13/cobra"
-	"github.com/widdlab/krapow/internal/incus"
-	"github.com/widdlab/krapow/internal/state"
-	"github.com/widdlab/krapow/internal/tart"
 )
 
 // krapowNamePattern matches the names krapow generates for runners:

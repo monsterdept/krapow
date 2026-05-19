@@ -1,6 +1,6 @@
 # Continuous integration on krapow's own self-hosted runners. The point is
 # dogfooding — these runners are managed by `krapow init` and registered
-# with widdlab/krapow under the labels below, so every PR exercises them
+# with monsterdept/krapow under the labels below, so every PR exercises them
 # under low-stakes load. release.yml stays on GitHub-hosted runners as the
 # safety net: a broken self-hosted runner can't prevent a release.
 #

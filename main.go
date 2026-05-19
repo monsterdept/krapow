@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/widdlab/krapow/cmd"
+	"github.com/monsterdept/krapow/cmd"
 )
 
 func main() {

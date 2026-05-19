@@ -1,6 +1,6 @@
 # Releases krapow on tag push (v*). goreleaser builds the linux/darwin ×
 # amd64/arm64 matrix, publishes archives + checksums to the GitHub release,
-# and (when HOMEBREW_TAP_TOKEN is set) updates widdlab/homebrew-tap.
+# and (when HOMEBREW_TAP_TOKEN is set) updates monsterdept/homebrew-tap.
 name: release
 
 on:
@@ -38,7 +38,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PAT with repo scope on widdlab/homebrew-tap. Without it, the
+          # PAT with repo scope on monsterdept/homebrew-tap. Without it, the
           # brews step fails but the release archives still publish.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           # Threaded into scripts/sign-darwin.sh via the goreleaser post
