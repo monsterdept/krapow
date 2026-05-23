@@ -30,6 +30,12 @@ func TestRenderPlistContainsKeyFields(t *testing.T) {
 		filepath.Join(tmp, ".krapow", "runners", "test-runner", "tmp"),
 		"<key>RunAtLoad</key>",
 		"<key>KeepAlive</key>",
+		// Without LimitLoadToSessionType the agent defaults to Aqua-only
+		// and fails to load on headless macOS servers (session=Background)
+		// with EIO from launchctl bootstrap.
+		"<key>LimitLoadToSessionType</key>",
+		"<string>Aqua</string>",
+		"<string>Background</string>",
 	}
 	for _, want := range wantSubstrings {
 		if !strings.Contains(got, want) {
