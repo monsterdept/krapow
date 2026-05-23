@@ -5,6 +5,7 @@ import (
 
 	"github.com/monsterdept/krapow/internal/auth"
 	"github.com/monsterdept/krapow/internal/githubapi"
+	"github.com/monsterdept/krapow/internal/hostmac"
 	"github.com/monsterdept/krapow/internal/incus"
 	"github.com/monsterdept/krapow/internal/state"
 	"github.com/monsterdept/krapow/internal/tart"
@@ -88,6 +89,18 @@ func doStopOrDestroy(name string, destroy bool) error {
 				return err
 			}
 		}
+	}
+
+	if s.EffectiveIsolation() == "host" {
+		if destroy {
+			fmt.Printf("==> destroying host-isolated runner %s (LaunchAgent + ~/.krapow/runners/%s)\n", name, name)
+			if err := hostmac.Destroy(name); err != nil {
+				fmt.Printf("    (warn) host destroy: %v\n", err)
+			}
+			return state.Remove(name)
+		}
+		fmt.Printf("==> unloading LaunchAgent for %s\n", name)
+		return hostmac.Bootout(name)
 	}
 
 	if s.EffectiveBackend() == "tart" {

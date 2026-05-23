@@ -26,9 +26,12 @@ func doctorCmd() *cobra.Command {
 			checks := []func() checkResult{checkAuth}
 			checks = append(checks, gitHubTokenChecks()...)
 			if runtime.GOOS == "darwin" {
-				// macOS host: tart drives mac + linux-arm runners. No incus
-				// here; the Linux-host checks are noise.
+				// macOS host: host-isolation (default for `init mac`) needs
+				// launchctl + the host's gh; tart drives `--isolation vm`
+				// mac runners and the linux-arm path.
 				checks = append(checks,
+					checkLaunchctlReachable,
+					checkHostToolchain,
 					checkTartReachable,
 					checkSshpassReachable,
 					checkTartCacheHealth,
@@ -194,6 +197,53 @@ func checkTartCacheHealth() checkResult {
 		}
 	}
 	return checkResult{status: statusOK, name: "tart cache health"}
+}
+
+// checkLaunchctlReachable verifies the launchctl CLI is available and the
+// gui/<uid> domain is reachable. Host-isolated runners are LaunchAgents in
+// that domain; if launchctl can't talk to it (e.g. user is running over SSH
+// without a real GUI session), `krapow init mac` will fail at activate.
+func checkLaunchctlReachable() checkResult {
+	if _, err := exec.LookPath("launchctl"); err != nil {
+		return checkResult{
+			status: statusFail,
+			name:   "launchctl on PATH",
+			detail: "not found (required for `krapow init mac` host isolation)",
+			fix:    "comes with macOS — investigate /bin/launchctl",
+		}
+	}
+	target := "gui/" + fmt.Sprintf("%d", os.Getuid())
+	out, err := exec.Command("launchctl", "print", target).CombinedOutput()
+	if err != nil {
+		return checkResult{
+			status: statusWarn,
+			name:   "launchctl gui/<uid> reachable",
+			detail: strings.TrimSpace(string(out)),
+			fix:    "host-isolated runners need a real login session; if you're on SSH, try again after `launchctl asuser` or fall back to `--isolation vm`",
+		}
+	}
+	return checkResult{status: statusOK, name: "launchctl gui/<uid> reachable"}
+}
+
+// checkHostToolchain verifies the tools host-isolated runners depend on are
+// on the user's PATH. Unlike VM-based runners, host runners use whatever
+// brew/gh/xcode the host has — krapow doesn't install them.
+func checkHostToolchain() checkResult {
+	var missing []string
+	for _, bin := range []string{"gh", "git", "python3"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			missing = append(missing, bin)
+		}
+	}
+	if len(missing) == 0 {
+		return checkResult{status: statusOK, name: "host toolchain (gh, git, python3)"}
+	}
+	return checkResult{
+		status: statusWarn,
+		name:   "host toolchain (gh, git, python3)",
+		detail: "missing: " + strings.Join(missing, ", ") + " — needed only for `--isolation host` mac runners",
+		fix:    "brew install " + strings.Join(missing, " "),
+	}
 }
 
 func checkSshpassReachable() checkResult {

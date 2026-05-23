@@ -8,6 +8,7 @@ import (
 
 	"github.com/monsterdept/krapow/internal/auth"
 	"github.com/monsterdept/krapow/internal/githubapi"
+	"github.com/monsterdept/krapow/internal/hostmac"
 	"github.com/monsterdept/krapow/internal/incus"
 	"github.com/monsterdept/krapow/internal/state"
 	"github.com/monsterdept/krapow/internal/tart"
@@ -54,10 +55,10 @@ func statusCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tKIND\tSCOPE\tTARGET\tVM\tRUNNER")
+			fmt.Fprintln(w, "NAME\tKIND\tISOLATION\tSCOPE\tTARGET\tSTATE\tRUNNER")
 			for _, r := range rs {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					r.Name, r.Kind, r.EffectiveScope(), r.Repo, vmState(r), runnerState(ghRunners, r))
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					r.Name, r.Kind, r.EffectiveIsolation(), r.EffectiveScope(), r.Repo, vmState(r), runnerState(ghRunners, r))
 			}
 			return w.Flush()
 		},
@@ -102,10 +103,14 @@ func runnerState(idx map[string]map[string]githubapi.Runner, r state.Runner) str
 	return gh.Status
 }
 
-// vmState returns the underlying VM state ("running", "stopped", "absent")
-// from whichever backend owns this runner. Backend is recorded at init time;
-// pre-mac records have an empty Backend and default to incus.
+// vmState returns the underlying instance state ("running", "stopped",
+// "absent") for whichever backend owns this runner. Backend is recorded at
+// init time; pre-mac records have an empty Backend and default to incus.
+// Host-isolated runners have no VM — we report the LaunchAgent's state.
 func vmState(r state.Runner) string {
+	if r.EffectiveIsolation() == "host" {
+		return hostmac.State(r.Name)
+	}
 	if r.EffectiveBackend() == "tart" {
 		return tart.State(r.Name)
 	}

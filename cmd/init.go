@@ -14,6 +14,7 @@ import (
 
 	"github.com/monsterdept/krapow/internal/auth"
 	"github.com/monsterdept/krapow/internal/githubapi"
+	"github.com/monsterdept/krapow/internal/hostmac"
 	"github.com/monsterdept/krapow/internal/imagebuild"
 	"github.com/monsterdept/krapow/internal/incus"
 	"github.com/monsterdept/krapow/internal/macssh"
@@ -50,7 +51,7 @@ func initCmd() *cobra.Command {
 }
 
 func initLinuxCmd() *cobra.Command {
-	var name, labels, repo, org string
+	var name, labels, repo, org, isolation string
 	var plain bool
 	// On macOS hosts, `init linux` produces a Linux ARM VM via tart instead of
 	// going through Incus (which doesn't exist on macOS). The labels default
@@ -64,51 +65,54 @@ func initLinuxCmd() *cobra.Command {
 		Aliases: []string{"lin"},
 		Short:   "Launch a Linux runner (Ubuntu via Incus on Linux hosts; Ubuntu ARM via Tart on macOS hosts)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runInit(linuxKind, name, labels, repo, org, plain)
+			return runInit(linuxKind, name, labels, repo, org, isolation, plain)
 		},
 	}
 	addScopeFlags(c, &repo, &org)
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: linux-runner-<6 alphanum>)")
 	c.Flags().StringVar(&labels, "labels", defaultLabels, "comma-separated runner labels")
+	c.Flags().StringVar(&isolation, "isolation", "", "isolation mechanism (default per host+kind; see README)")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
 }
 
 func initMacCmd() *cobra.Command {
-	var name, labels, repo, org string
+	var name, labels, repo, org, isolation string
 	var plain bool
 	c := &cobra.Command{
 		Use:     "mac",
 		Aliases: []string{"macos"},
-		Short:   "Launch a macOS Tart VM as a runner (macOS hosts only)",
+		Short:   "Launch a macOS runner on this host (default: --isolation host, no VM)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if runtime.GOOS != "darwin" {
 				return fmt.Errorf("`krapow init mac` requires a macOS host (Tart wraps Apple's Virtualization.framework); current GOOS=%s", runtime.GOOS)
 			}
-			return runInit(macKind, name, labels, repo, org, plain)
+			return runInit(macKind, name, labels, repo, org, isolation, plain)
 		},
 	}
 	addScopeFlags(c, &repo, &org)
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: mac-runner-<6 alphanum>)")
 	c.Flags().StringVar(&labels, "labels", "self-hosted,macOS,arm64,krapow", "comma-separated runner labels")
+	c.Flags().StringVar(&isolation, "isolation", "", "isolation mechanism (default per host+kind; see README)")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
 }
 
 func initWinCmd() *cobra.Command {
-	var name, labels, repo, org string
+	var name, labels, repo, org, isolation string
 	var yesBuild, plain bool
 	c := &cobra.Command{
 		Use:     "win",
 		Aliases: []string{"windows"},
 		Short:   "Launch a Windows Incus VM as a runner (auto-bakes base image on first run)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runInitWin(name, labels, repo, org, yesBuild, plain)
+			return runInitWin(name, labels, repo, org, isolation, yesBuild, plain)
 		},
 	}
 	addScopeFlags(c, &repo, &org)
 	c.Flags().StringVar(&name, "name", "", "instance + runner name (default: win-runner-<6 alphanum>)")
 	c.Flags().StringVar(&labels, "labels", "self-hosted,windows,krapow", "comma-separated runner labels")
+	c.Flags().StringVar(&isolation, "isolation", "", "isolation mechanism (windows is vm-only)")
 	c.Flags().BoolVarP(&yesBuild, "yes", "y", false, "skip the confirmation prompt before kicking off a base-image build")
 	c.Flags().BoolVar(&plain, "plain", false, "disable the interactive TUI and print plain status lines")
 	return c
@@ -203,6 +207,31 @@ const (
 	macKind
 )
 
+// resolveIsolation maps the user's --isolation flag (or "" for default) to a
+// concrete value validated against what krapow actually implements for this
+// (kind, host) today. The allowed lists grow as new isolation modes ship;
+// today only "vm" exists everywhere.
+//
+// The first entry in each list is the default when --isolation is empty.
+func resolveIsolation(k kind, userInput string) (string, error) {
+	allowed := map[kind][]string{
+		linuxKind:   {"vm"},         // Phase 3 will prepend "container" on Linux hosts
+		macKind:     {"host", "vm"}, // "host" = run as current user under sandboxed HOME (default)
+		windowsKind: {"vm"},         // VM-only forever (no host/container path for Windows)
+	}
+	values := allowed[k]
+	if userInput == "" {
+		return values[0], nil
+	}
+	for _, v := range values {
+		if v == userInput {
+			return v, nil
+		}
+	}
+	return "", fmt.Errorf("--isolation %q is not valid for %s runners on this host; allowed: %s",
+		userInput, kindName(k), strings.Join(values, ", "))
+}
+
 var (
 	linuxImage    = envOr("KRAPOW_LINUX_IMAGE", "images:ubuntu/noble/cloud")
 	windowsImage  = envOr("KRAPOW_WIN_IMAGE", "local:win-runner-base")
@@ -217,7 +246,7 @@ func envOr(k, def string) string {
 	return def
 }
 
-func runInitWin(name, labels, repo, org string, yesBuild, plain bool) error {
+func runInitWin(name, labels, repo, org, isolation string, yesBuild, plain bool) error {
 	exists, err := incus.ImageExists(windowsImage)
 	if err != nil {
 		return err
@@ -236,7 +265,7 @@ func runInitWin(name, labels, repo, org string, yesBuild, plain bool) error {
 			return err
 		}
 	}
-	return runInit(windowsKind, name, labels, repo, org, plain)
+	return runInit(windowsKind, name, labels, repo, org, isolation, plain)
 }
 
 func readYes() bool {
@@ -250,20 +279,25 @@ func readYes() bool {
 
 // initContext bundles everything a phase needs.
 type initContext struct {
-	gh       *githubapi.Client
-	kind     kind
-	name     string
-	labels   string
-	owner    string // "owner/name" for repo runners, or "orgname" for org runners
-	scope    string // "repo" or "org"
-	target   string // API path prefix: "repos/owner/name" or "orgs/orgname"
-	ownerURL string // "https://github.com/owner/name" or "https://github.com/orgname"
-	regToken string
-	vmIP     string // populated by Windows ssh phase
+	gh        *githubapi.Client
+	kind      kind
+	name      string
+	labels    string
+	owner     string // "owner/name" for repo runners, or "orgname" for org runners
+	scope     string // "repo" or "org"
+	target    string // API path prefix: "repos/owner/name" or "orgs/orgname"
+	ownerURL  string // "https://github.com/owner/name" or "https://github.com/orgname"
+	isolation string // resolved isolation: "vm" today; "host"/"container" land in later phases
+	regToken  string
+	vmIP      string // populated by Windows ssh phase
 }
 
-func runInit(k kind, name, labels, repoFlag, orgFlag string, plain bool) error {
+func runInit(k kind, name, labels, repoFlag, orgFlag, isolationFlag string, plain bool) error {
 	owner, scope, target, err := resolveScope(repoFlag, orgFlag)
+	if err != nil {
+		return err
+	}
+	isolation, err := resolveIsolation(k, isolationFlag)
 	if err != nil {
 		return err
 	}
@@ -285,17 +319,18 @@ func runInit(k kind, name, labels, repoFlag, orgFlag string, plain bool) error {
 	}
 
 	ic := &initContext{
-		gh:       gh,
-		kind:     k,
-		name:     name,
-		labels:   labels,
-		owner:    owner,
-		scope:    scope,
-		target:   target,
-		ownerURL: "https://github.com/" + owner,
+		gh:        gh,
+		kind:      k,
+		name:      name,
+		labels:    labels,
+		owner:     owner,
+		scope:     scope,
+		target:    target,
+		ownerURL:  "https://github.com/" + owner,
+		isolation: isolation,
 	}
 
-	phases := phasesFor(k)
+	phases := phasesFor(k, ic.isolation)
 	runner := tui.New(name, phases, plain)
 	incus.StreamOut = runner.Logger()
 	incus.StreamErr = runner.Logger()
@@ -340,6 +375,18 @@ func cleanupFailedInit(ic *initContext) {
 		if err := ic.gh.DeleteRunner(ic.target, runner.ID); err != nil {
 			fmt.Fprintf(os.Stderr, "    (warn) DeleteRunner: %v\n", err)
 		}
+	}
+
+	// Host-isolated cleanup runs whether or not state was saved — the runner
+	// home dir + downloaded agent tarball may exist from a crash mid-provision,
+	// before activate persisted state.
+	if ic.kind == macKind && ic.isolation == "host" {
+		fmt.Fprintf(os.Stderr, "    destroying host-isolated runner %s\n", ic.name)
+		if err := hostmac.Destroy(ic.name); err != nil {
+			fmt.Fprintf(os.Stderr, "    (warn) hostmac destroy: %v\n", err)
+		}
+		_ = state.Remove(ic.name)
+		return
 	}
 
 	s, _ := state.Load(ic.name)
@@ -388,10 +435,10 @@ func kindPrefix(k kind) string {
 	}
 }
 
-// phasesFor returns the TUI phase list for a given kind+host combo. The Mac
-// and Linux-ARM-on-Mac paths share one phase set because they share the tart
-// pull/clone/run/ssh shape.
-func phasesFor(k kind) []tui.PhaseSpec {
+// phasesFor returns the TUI phase list for a given (kind, isolation) combo.
+// Mac+host has no pull/boot (no VM); other paths share the tart shape on
+// macOS or the Incus shape on Linux.
+func phasesFor(k kind, isolation string) []tui.PhaseSpec {
 	tartPhases := []tui.PhaseSpec{
 		{ID: "register", Label: "Register"},
 		{ID: "pull", Label: "Pull"},
@@ -400,6 +447,14 @@ func phasesFor(k kind) []tui.PhaseSpec {
 		{ID: "verify", Label: "Verify"},
 	}
 	switch {
+	case k == macKind && isolation == "host":
+		return []tui.PhaseSpec{
+			{ID: "register", Label: "Register"},
+			{ID: "preflight", Label: "Preflight"},
+			{ID: "provision", Label: "Provision"},
+			{ID: "activate", Label: "Activate"},
+			{ID: "verify", Label: "Verify"},
+		}
 	case k == macKind:
 		return tartPhases
 	case k == linuxKind && runtime.GOOS == "darwin":
@@ -440,6 +495,8 @@ func doInit(r *tui.Runner, ic *initContext) error {
 		Name: ic.name, Labels: ic.labels,
 	}
 	switch {
+	case ic.kind == macKind && ic.isolation == "host":
+		return doInitMacHost(r, ic, vars)
 	case ic.kind == macKind:
 		return doInitTart(r, ic, vars, macImage, "mac", true)
 	case ic.kind == linuxKind && runtime.GOOS == "darwin":
@@ -471,7 +528,8 @@ func doInitLinux(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 		r.Log("VM started (cloud-init now running async inside the guest)")
 		r.Log("writing ~/.krapow/state/%s.json", ic.name)
 		err = state.Save(state.Runner{
-			Name: ic.name, Kind: "linux", Repo: ic.owner, Scope: ic.scope,
+			Name: ic.name, Kind: "linux", Isolation: ic.isolation,
+			Repo: ic.owner, Scope: ic.scope,
 			Labels: ic.labels, Created: time.Now(),
 		})
 	}
@@ -536,7 +594,7 @@ func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, gues
 		return err
 	}
 	if err := state.Save(state.Runner{
-		Name: ic.name, Kind: guestKind, Backend: "tart",
+		Name: ic.name, Kind: guestKind, Backend: "tart", Isolation: ic.isolation,
 		Repo: ic.owner, Scope: ic.scope, Labels: ic.labels, Created: time.Now(),
 	}); err != nil {
 		r.End("boot", err)
@@ -569,6 +627,74 @@ func doInitTart(r *tui.Runner, ic *initContext, vars provision.Vars, image, gues
 	if err != nil {
 		return err
 	}
+
+	r.Start("verify")
+	r.Log("polling GitHub for runner to report 'online'")
+	err = verifyRunnerOnline(r, ic.gh, ic.target, ic.name, 2*time.Minute)
+	r.End("verify", err)
+	return err
+}
+
+// doInitMacHost drives the macOS host-isolated path: prepare a sandboxed
+// HOME under ~/.krapow/runners/<name>/, run the provisioning script as the
+// current user against that HOME (downloads the runner agent, ./config.sh),
+// install a per-runner LaunchAgent in the user's real LaunchAgents dir, then
+// poll GitHub for the runner to report online.
+//
+// No VM, no sudo, no service user. The HOME override is a hygiene boundary
+// against credential/cache pollution — not a security one.
+func doInitMacHost(r *tui.Runner, ic *initContext, vars provision.Vars) error {
+	r.Start("preflight")
+	rh, err := hostmac.RunnerHome(ic.name)
+	if err != nil {
+		r.End("preflight", err)
+		return err
+	}
+	r.Log("runner home: %s", rh)
+	if err := hostmac.PrepareHome(ic.name); err != nil {
+		r.End("preflight", err)
+		return err
+	}
+	if _, err := exec.LookPath("gh"); err != nil {
+		err = fmt.Errorf("'gh' not on PATH — host-isolated runners use the host's gh (brew install gh)")
+		r.End("preflight", err)
+		return err
+	}
+	r.End("preflight", nil)
+
+	r.Start("provision")
+	script, err := provision.MacHostProvision(vars)
+	if err != nil {
+		r.End("provision", err)
+		return err
+	}
+	r.Log("bash -s with HOME=%s (downloading runner, ./config.sh)", rh)
+	if err := hostmac.RunProvision(ic.name, script, r.Logger(), r.Logger()); err != nil {
+		r.End("provision", err)
+		return err
+	}
+	r.End("provision", nil)
+
+	r.Start("activate")
+	plistPath, _ := hostmac.LaunchAgentPath(ic.name)
+	r.Log("writing %s", plistPath)
+	if err := hostmac.WritePlist(ic.name); err != nil {
+		r.End("activate", err)
+		return err
+	}
+	r.Log("launchctl bootstrap gui/%d %s", os.Getuid(), filepath.Base(plistPath))
+	if err := hostmac.Bootstrap(ic.name); err != nil {
+		r.End("activate", err)
+		return err
+	}
+	if err := state.Save(state.Runner{
+		Name: ic.name, Kind: "mac", Backend: "host", Isolation: ic.isolation,
+		Repo: ic.owner, Scope: ic.scope, Labels: ic.labels, Created: time.Now(),
+	}); err != nil {
+		r.End("activate", err)
+		return err
+	}
+	r.End("activate", nil)
 
 	r.Start("verify")
 	r.Log("polling GitHub for runner to report 'online'")
@@ -627,7 +753,8 @@ func doInitWindows(r *tui.Runner, ic *initContext, vars provision.Vars) error {
 	if err == nil {
 		r.Log("VM started; writing state file")
 		err = state.Save(state.Runner{
-			Name: ic.name, Kind: "windows", Repo: ic.owner, Scope: ic.scope,
+			Name: ic.name, Kind: "windows", Isolation: ic.isolation,
+			Repo: ic.owner, Scope: ic.scope,
 			Labels: ic.labels, Created: time.Now(),
 		})
 	}

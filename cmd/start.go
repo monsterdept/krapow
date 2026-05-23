@@ -6,6 +6,7 @@ import (
 
 	"github.com/monsterdept/krapow/internal/auth"
 	"github.com/monsterdept/krapow/internal/githubapi"
+	"github.com/monsterdept/krapow/internal/hostmac"
 	"github.com/monsterdept/krapow/internal/incus"
 	"github.com/monsterdept/krapow/internal/state"
 	"github.com/monsterdept/krapow/internal/tart"
@@ -38,7 +39,17 @@ func doStart(name string) error {
 		return fmt.Errorf("no krapow state for %q", name)
 	}
 
-	if s.EffectiveBackend() == "tart" {
+	if s.EffectiveIsolation() == "host" {
+		st := hostmac.State(name)
+		if st == "running" {
+			fmt.Printf("==> host-isolated runner %s already loaded\n", name)
+		} else {
+			fmt.Printf("==> loading LaunchAgent for %s\n", name)
+			if err := hostmac.Bootstrap(name); err != nil {
+				return err
+			}
+		}
+	} else if s.EffectiveBackend() == "tart" {
 		st := tart.State(name)
 		if st == "running" {
 			fmt.Printf("==> tart VM %s already running\n", name)

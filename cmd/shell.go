@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/monsterdept/krapow/internal/hostmac"
 	"github.com/monsterdept/krapow/internal/incus"
 	"github.com/monsterdept/krapow/internal/sshkeys"
 	"github.com/monsterdept/krapow/internal/state"
@@ -40,6 +41,8 @@ func doShell(name string, remote []string) error {
 	}
 
 	switch {
+	case s.EffectiveIsolation() == "host":
+		return shellHostMac(s, remote)
 	case s.EffectiveBackend() == "tart":
 		return shellTart(s, remote)
 	case s.Kind == "windows":
@@ -47,6 +50,39 @@ func doShell(name string, remote []string) error {
 	default:
 		return shellIncusLinux(s, remote)
 	}
+}
+
+// shellHostMac drops into an interactive shell cd'd into the runner's
+// working directory with TMPDIR pointed at its private tmp/ — the same env
+// the runner agent itself runs under. HOME stays the user's real home so
+// keychain-aware tools (codesign, security, etc.) work. For one-shot
+// commands (after `--`), runs them via `bash -c` with the same env.
+func shellHostMac(s *state.Runner, remote []string) error {
+	rh, err := hostmac.RunnerHome(s.Name)
+	if err != nil {
+		return err
+	}
+	env, err := hostmac.SandboxEnv(s.Name)
+	if err != nil {
+		return err
+	}
+	var bin string
+	var args []string
+	if len(remote) == 0 {
+		bin = os.Getenv("SHELL")
+		if bin == "" {
+			bin = "/bin/zsh"
+		}
+		args = []string{"-l"}
+	} else {
+		bin = "bash"
+		args = []string{"-c", strings.Join(remote, " ")}
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = rh
+	cmd.Env = env
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
 }
 
 // shellTart shells into a cirruslabs tart VM as admin:admin. Used for both

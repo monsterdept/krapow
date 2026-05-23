@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"runtime"
 
+	"github.com/monsterdept/krapow/internal/hostmac"
 	"github.com/monsterdept/krapow/internal/incus"
 	"github.com/monsterdept/krapow/internal/state"
 	"github.com/monsterdept/krapow/internal/tart"
@@ -48,14 +49,13 @@ func runClean(yes bool) error {
 
 	type orphan struct {
 		name    string
-		backend string // "tart" or "incus"
+		backend string // "tart", "incus", or "host"
 	}
 	var orphans []orphan
 
-	// Scan only the backend krapow actually uses on this host. macOS = tart
-	// (no incus there even if the user has it installed for a remote); Linux
-	// = incus. Crossing that line risks deleting unrelated VMs that happen to
-	// match the naming pattern.
+	// Scan only the backends krapow actually uses on this host. macOS = tart
+	// + host-isolated runners; Linux = incus. Crossing that line risks
+	// deleting unrelated VMs that happen to match the naming pattern.
 	if runtime.GOOS == "darwin" {
 		if _, err := exec.LookPath("tart"); err == nil {
 			names, err := tart.LocalVMs()
@@ -68,6 +68,19 @@ func runClean(yes bool) error {
 				}
 				orphans = append(orphans, orphan{name: n, backend: "tart"})
 			}
+		}
+		// Host-isolated runners leave a LaunchAgent plist + ~/.krapow/runners
+		// dir behind. Enumerate both, filter by the krapow naming pattern,
+		// and skip anything still tracked.
+		names, err := hostmac.LocalRunners()
+		if err != nil {
+			return fmt.Errorf("hostmac scan: %w", err)
+		}
+		for _, n := range names {
+			if !krapowNamePattern.MatchString(n) || known[n] {
+				continue
+			}
+			orphans = append(orphans, orphan{name: n, backend: "host"})
 		}
 	} else {
 		if _, err := exec.LookPath("incus"); err == nil {
@@ -90,20 +103,29 @@ func runClean(yes bool) error {
 	}
 
 	for _, o := range orphans {
+		label := o.backend + " VM"
+		if o.backend == "host" {
+			label = "host-isolated runner"
+		}
 		if yes {
-			fmt.Printf("==> destroying %s VM %s\n", o.backend, o.name)
-			if o.backend == "tart" {
+			fmt.Printf("==> destroying %s %s\n", label, o.name)
+			switch o.backend {
+			case "tart":
 				_ = tart.Stop(o.name, 30) // best-effort; Delete refuses a running VM
 				if err := tart.Delete(o.name); err != nil {
 					fmt.Printf("    (warn) tart delete: %v\n", err)
 				}
-			} else {
+			case "incus":
 				if err := incus.Delete(o.name); err != nil {
 					fmt.Printf("    (warn) incus delete: %v\n", err)
 				}
+			case "host":
+				if err := hostmac.Destroy(o.name); err != nil {
+					fmt.Printf("    (warn) hostmac destroy: %v\n", err)
+				}
 			}
 		} else {
-			fmt.Printf("would delete %s VM %s\n", o.backend, o.name)
+			fmt.Printf("would delete %s %s\n", label, o.name)
 		}
 	}
 

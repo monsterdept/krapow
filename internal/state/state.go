@@ -11,13 +11,14 @@ import (
 )
 
 type Runner struct {
-	Name    string    `json:"name"`
-	Kind    string    `json:"kind"`              // "linux", "windows", or "mac"
-	Backend string    `json:"backend,omitempty"` // "incus" or "tart"; empty == "incus" (pre-mac records)
-	Repo    string    `json:"repo"`              // "owner/name" when Scope=="repo"; "orgname" when Scope=="org"
-	Scope   string    `json:"scope,omitempty"`   // "repo" or "org"; empty == "repo" (pre-org-runner records)
-	Labels  string    `json:"labels"`
-	Created time.Time `json:"created"`
+	Name      string    `json:"name"`
+	Kind      string    `json:"kind"`                // "linux", "windows", or "mac"
+	Backend   string    `json:"backend,omitempty"`   // "incus", "tart", or "host"; empty == "incus" (pre-mac records)
+	Isolation string    `json:"isolation,omitempty"` // "vm", "container", or "host"; empty == "vm" (pre-isolation records)
+	Repo      string    `json:"repo"`                // "owner/name" when Scope=="repo"; "orgname" when Scope=="org"
+	Scope     string    `json:"scope,omitempty"`     // "repo" or "org"; empty == "repo" (pre-org-runner records)
+	Labels    string    `json:"labels"`
+	Created   time.Time `json:"created"`
 }
 
 // EffectiveBackend returns r.Backend with the legacy default ("incus") applied
@@ -36,6 +37,16 @@ func (r *Runner) EffectiveScope() string {
 		return "repo"
 	}
 	return r.Scope
+}
+
+// EffectiveIsolation returns r.Isolation with the legacy default ("vm")
+// applied. Every runner created before the --isolation flag landed was a VM,
+// so missing field means "vm" for stop/start/shell dispatch purposes.
+func (r *Runner) EffectiveIsolation() string {
+	if r.Isolation == "" {
+		return "vm"
+	}
+	return r.Isolation
 }
 
 // APITarget returns the GitHub API path prefix for this runner's scope:
